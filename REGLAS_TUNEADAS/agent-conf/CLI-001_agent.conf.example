@@ -1,0 +1,37 @@
+<!--
+  ===========================================================================
+  Kriptome — agent.conf del GRUPO de un cliente (ejemplo: CLI-001)
+  ===========================================================================
+  Se despliega al grupo Wazuh CLI-001. Todo lo que emitan sus agentes llevara
+  el label client_id=CLI-001, que la Kriptome App usa para separar tenants.
+  ==
+  IMPORTANTE (doc 01 secc.5): ninguna consulta al Indexer corre sin client_id.
+  El client_id se resuelve en backend; el label es la fuente de ese client_id.
+  ===========================================================================
+-->
+<agent_config>
+
+  <labels>
+    <label key="client_id">CLI-001</label>
+    <label key="client_name">Cliente Ejemplo S.A.</label>
+    <!-- criticality/asset_* NO van aqui: son por-agente (ossec.conf del agente) -->
+  </labels>
+
+  <!-- Aqui pueden ir overrides de FIM/logs especificos del parque de este
+       cliente (p.ej. rutas de una app de negocio suya). -->
+
+</agent_config>
+
+<!--
+  ===========================================================================
+  Ejemplo del bloque <labels> POR AGENTE (en el ossec.conf del endpoint):
+  ===========================================================================
+  <labels>
+    <label key="asset_id">AST-004</label>
+    <label key="asset_alias">Servidor de facturacion</label>
+    <label key="criticality">high</label>
+    <label key="environment">prod</label>
+    <label key="role">db</label>
+  </labels>
+  ===========================================================================
+-->

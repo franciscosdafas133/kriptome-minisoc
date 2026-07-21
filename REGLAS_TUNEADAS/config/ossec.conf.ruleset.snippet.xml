@@ -1,0 +1,59 @@
+<!--
+  Fragmento <ruleset> para /var/ossec/etc/ossec.conf del Manager (Kriptome).
+  Wazuh v4.14.6. Reemplaza el bloque <ruleset> por este.
+
+  PARIDAD CON EL DEFAULT: este bloque CONSERVA todo lo que trae el ossec.conf
+  default de v4.14.6 (verificado contra etc/templates/config/generic/rules.template
+  del tag v4.14.6) y le AÑADE lo de Kriptome. En concreto se conservan:
+   - <rule_exclude>0215-policy_rules.xml</rule_exclude>  (exclusion DEFAULT de
+     Wazuh; si se pierde al reemplazar el bloque, se activan reglas legacy de
+     policy que generan ruido).
+   - Las 6 <list> default (audit-keys, aws-eventnames, security-eventchannel,
+     malicious-ioc/*). NO quitar una lista aunque su tecnologia este excluida:
+     si manana se retira un rule_exclude (p.ej. el cliente adopta AWS) y la
+     lista que esas reglas referencian no esta declarada, analysisd NO ARRANCA.
+
+  CORRECCIONES vs 02_Set_Reglas.md seccion 6:
+   - Se añaden los <list> de kriptome (fim-whitelist, cisa-kev). Los archivos
+     deben copiarse a etc/lists/ ANTES de reiniciar (ver GUIA_DE_DESPLIEGUE).
+   - rule_exclude por parque: SOLO tecnologias que el cliente NO usa. Se aplica
+     por deployment; si un cliente SI usa O365/Docker/etc, quita su linea.
+   - El orden importa: primero decoders/rules oficiales, luego custom.
+-->
+<ruleset>
+  <!-- Decoders y reglas oficiales -->
+  <decoder_dir>ruleset/decoders</decoder_dir>
+  <rule_dir>ruleset/rules</rule_dir>
+  <rule_exclude>0215-policy_rules.xml</rule_exclude>
+
+  <!-- Listas CDB default de Wazuh v4.14.6 (mantener SIEMPRE las 6) -->
+  <list>etc/lists/audit-keys</list>
+  <list>etc/lists/amazon/aws-eventnames</list>
+  <list>etc/lists/security-eventchannel</list>
+  <list>etc/lists/malicious-ioc/malware-hashes</list>
+  <list>etc/lists/malicious-ioc/malicious-ip</list>
+  <list>etc/lists/malicious-ioc/malicious-domains</list>
+
+  <!-- Listas CDB de Kriptome (copiar los archivos antes del restart) -->
+  <list>etc/lists/kriptome-fim-whitelist</list>
+  <list>etc/lists/kriptome-cisa-kev</list>
+
+  <!-- Decoders y reglas custom de Kriptome -->
+  <decoder_dir>etc/decoders</decoder_dir>
+  <rule_dir>etc/rules</rule_dir>
+
+  <!--
+    Exclusiones por parque (NO por gusto). Solo si el cliente no usa esa tech.
+    Verifica el nombre EXACTO del archivo en ruleset/rules/ antes de excluir.
+    (En v4.14 los nombres cambian respecto al doc: p.ej. AWS = 0350-amazon_rules.xml,
+     Azure = 0555-azure_rules.xml, Docker = 0455-docker_rules.xml / 0560-docker_integration_rules.xml,
+     GCP = 0690-gcp_rules.xml, O365 = 0755-office365_rules.xml, GitHub = 0750-github_rules.xml)
+  -->
+  <rule_exclude>0350-amazon_rules.xml</rule_exclude>
+  <rule_exclude>0690-gcp_rules.xml</rule_exclude>
+  <rule_exclude>0555-azure_rules.xml</rule_exclude>
+  <rule_exclude>0455-docker_rules.xml</rule_exclude>
+  <rule_exclude>0560-docker_integration_rules.xml</rule_exclude>
+  <rule_exclude>0755-office365_rules.xml</rule_exclude>
+  <rule_exclude>0750-github_rules.xml</rule_exclude>
+</ruleset>
