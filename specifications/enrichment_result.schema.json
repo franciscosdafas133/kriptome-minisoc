@@ -1,0 +1,51 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://kriptome.internal/specifications/enrichment_result.schema.json",
+  "title": "EnrichmentResult",
+  "description": "Resultado de UNA consulta de enriquecimiento externo (GeoIP, reputación de IP/hash/dominio, traducción de códigos). Corresponde al 'Tipo 2' de campo descrito en REGLAS_TUNEADAS/GUIA_CAMPOS_ENRIQUECIMIENTO.docx §1: nunca es nativo de Wazuh. Diseñado para vivir detrás de una caché por IOC con TTL (doc 03, nivel de control 6 -- '87 alertas del mismo IOC -> 1 consulta API'). NO implementado -- contrato para cuando exista el conector real.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["ioc_type", "ioc_value", "enrichment_type", "queried_at", "cache_ttl_seconds", "source_provider", "result"],
+  "properties": {
+    "ioc_type": {
+      "type": "string",
+      "enum": ["ip", "sha256", "md5", "domain", "cve"]
+    },
+    "ioc_value": {
+      "type": "string",
+      "description": "El valor concreto consultado (una IP, un hash, un dominio, un CVE-ID). Es la clave de caché."
+    },
+    "enrichment_type": {
+      "type": "string",
+      "enum": ["geoip", "ip_reputation", "hash_reputation", "domain_reputation", "cve_description_es"]
+    },
+    "queried_at": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "cache_ttl_seconds": {
+      "type": "integer",
+      "minimum": 0,
+      "description": "TTL de la caché para este resultado. No hay un valor fijo recomendado en los documentos funcionales -- queda a definir por tipo de enriquecimiento (un GeoIP cambia menos que una reputación de IP)."
+    },
+    "source_provider": {
+      "type": "string",
+      "description": "Proveedor consultado (p. ej. 'maxmind-geoip', 'abuseipdb', 'virustotal', 'nvd'). No se asume un proveedor específico contratado -- este repo no incluye credenciales ni integración real."
+    },
+    "result": {
+      "type": "object",
+      "description": "Payload específico del tipo de enriquecimiento. Estructura libre por enrichment_type -- no se fuerza un formato único porque cada proveedor devuelve campos distintos (país+ciudad para GeoIP; score+categoría para reputación; resumen de texto para CVE)."
+    },
+    "confidence": {
+      "type": ["number", "null"],
+      "minimum": 0,
+      "maximum": 1,
+      "description": "Si el proveedor da un score de confianza. Null si no aplica (p. ej. GeoIP no tiene 'confianza', solo el dato)."
+    },
+    "query_failed": {
+      "type": "boolean",
+      "default": false,
+      "description": "Si la consulta externa falló (timeout, rate limit, proveedor caído). El evento debe seguir su flujo SIN el enriquecimiento en vez de bloquearse -- ver doc 03: el enriquecimiento no es bloqueante para abrir un caso CRITICAL."
+    }
+  }
+}

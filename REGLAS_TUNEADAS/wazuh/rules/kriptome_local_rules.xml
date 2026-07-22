@@ -2,7 +2,12 @@
   ===========================================================================
   Kriptome MiniSOC — Reglas custom TUNEADAS
   ===========================================================================
-  Version ......: 1.1.0
+  Version ......: 1.2.0
+                  1.2.0 = alineacion tecnica: vocabulario de estados normalizado,
+                          100040 (CISA KEV) movida a experimental/ (deshabilitada;
+                          decision de arquitectura KEV pendiente), documentada
+                          equivalencia same_source_ip/same_srcip. Ver
+                          REPO_ALIGNMENT_REPORT.md y CHANGELOG.md.
                   1.1.0 = revision de despliegue: snippet ossec.conf con paridad
                           default v4.14.6, listas CDB en formato estricto,
                           test_data con margen de frecuencia, runbook completo.
@@ -25,9 +30,26 @@
     kriptome_critical    -> abre/actualiza caso, revision humana, IA no descarta
     kriptome_digest      -> resumen periodico, no tiempo real
   ==
-  ESTADO de cada regla:  [VALIDADO-XML] = comprobado contra el XML nativo
-                         [PEND-LOGTEST] = requiere wazuh-logtest en el Manager
-                         [PEND-SHADOW]  = requiere observacion en shadow mode
+  VOCABULARIO DE ESTADOS (normalizado; ver specifications/validation_statuses.md
+  para las definiciones completas). Reemplaza el vocabulario libre anterior
+  (PEND-LOGTEST/PEND-SHADOW/NO VERIFICADO/OPCIONAL):
+    DISEÑADO                 -> especificado, sin verificar contra XML ni Manager
+    VALIDADO-XML             -> comprobado contra el ruleset XML oficial v4.14.6
+    VALIDADO-LOGTEST         -> corrido en wazuh-logtest con evidencia guardada
+    VALIDADO-SHADOW          -> observado en shadow mode con evidencia guardada
+    PENDIENTE                -> requiere una validacion superior no realizada aun
+    EXPERIMENTAL             -> decision de producto sin tomar; no se carga en prod
+  Ninguna regla de este archivo esta marcada VALIDADO-LOGTEST ni
+  VALIDADO-SHADOW porque no existe evidencia de ejecucion guardada en el
+  repo (nunca se ha desplegado en un Manager real). Ver REPO_ALIGNMENT_REPORT.md.
+  ==
+  NOTA same_source_ip vs same_srcip (verificado en src/analysisd/rules.c del
+  tag v4.14.6, lineas 169-170 y 1019-1020): son ALIASES del mismo parametro
+  interno (FIELD_SRCIP) — ambos tags son validos y equivalentes en Wazuh,
+  ninguno es incorrecto. Este archivo usa <same_source_ip/> porque es el tag
+  que usa el ruleset OFICIAL de Wazuh (0 apariciones de <same_srcip/> en
+  ruleset/rules/*.xml del tag v4.14.6) — mantiene consistencia de estilo con
+  el ruleset que este proyecto audita, sin diferencia funcional.
   ===========================================================================
 -->
 
@@ -38,7 +60,7 @@
 <group name="kriptome,">
 
   <!-- =======================================================================
-       100010 — ROLL-UP de brute force SSH   [VALIDADO-XML]
+       100010 — ROLL-UP de brute force SSH   [ESTADO: VALIDADO-XML]
        ==
        QUE HACE: NO re-detecta. El ruleset nativo YA detecta brute force SSH:
            5712  (freq8/tf120) invalid/non-existent user  -> if_matched_sid 5710
@@ -60,7 +82,7 @@
   </rule>
 
   <!-- =======================================================================
-       100011 — Brute force Windows contra UNA cuenta   [VALIDADO-XML / PEND-LOGTEST]
+       100011 — Brute force Windows contra UNA cuenta   [ESTADO: VALIDADO-XML; requiere VALIDADO-LOGTEST -> hoy PENDIENTE]
        ==
        QUE HACE: rellena un HUECO REAL. El nativo 60204 correlaciona
        "Multiple Windows Logon Failures" por win.eventdata.ipAddress (misma
@@ -82,7 +104,7 @@
   </rule>
 
   <!-- =======================================================================
-       100012 — Login SSH EXITOSO tras brute force (misma IP)   [PEND-LOGTEST]
+       100012 — Login SSH EXITOSO tras brute force (misma IP)   [ESTADO: VALIDADO-XML (sintaxis y campos); requiere VALIDADO-LOGTEST -> hoy PENDIENTE]
        ==
        QUE HACE: el cambio material critico del doc 02 (Escenario C). Éxito de
        autenticacion desde una IP que acaba de hacer brute force = posible
@@ -103,7 +125,7 @@
   </rule>
 
   <!-- =======================================================================
-       100013 — Login Windows EXITOSO tras brute force (misma IP)   [PEND-LOGTEST]
+       100013 — Login Windows EXITOSO tras brute force (misma IP)   [ESTADO: VALIDADO-XML (sintaxis y campos); requiere VALIDADO-LOGTEST -> hoy PENDIENTE]
        ==
        Equivalente Windows de 100012. No estaba en el doc pero es la misma
        logica de cambio material y Windows es la mitad del parque PyME.
@@ -119,7 +141,9 @@
   </rule>
 
   <!-- =======================================================================
-       100030 — Whitelist FIM por lista CDB   [VALIDADO-XML]  (OPCIONAL)
+       100030 — Whitelist FIM por lista CDB   [ESTADO: VALIDADO-XML]
+       (Alcance: activacion opcional por cliente — cada Manager decide si la
+       carga; no es un estado de validacion, es una decision de despliegue.)
        ==
        QUE HACE: silencia FIM en paths de PURO ruido (ej. heartbeat).
        FIX vs doc: en vez de hardcodear el path en la regla, usa lista CDB;
@@ -138,30 +162,19 @@
   </rule>
 
   <!-- =======================================================================
-       100040 — CVE bajo explotacion activa (CISA KEV)   [VALIDADO-XML]  (OPCIONAL)
+       100040 — CVE bajo explotacion activa (CISA KEV)   [ESTADO: EXPERIMENTAL]
        ==
-       FIX CRITICO vs doc: el original matcheaba <field name="cisa_kev">true</field>.
-       Ese campo NO EXISTE cuando Wazuh evalua la regla: el enriquecimiento KEV
-       ocurre en la Kriptome App DESPUES de indexar (regla de arquitectura #8).
-       => la regla original NUNCA podia disparar.
-       Version corregida: matchea vulnerability.cve (campo real, lo usa 23501)
-       contra una lista CDB de CVE-IDs del catalogo CISA KEV que Kriptome
-       actualiza a diario. Esto SI funciona en tiempo de regla.
-       RECOMENDACION: se puede hacer igual (o en vez de) en la App (coincide con
-       su arquitectura). Ver EXPLICACION_DEL_TUNING.docx §11 y §15 (decision
-       D-KEV: elegir fuente de verdad). Es intencionalmente
-       redundante-seguro; escoge UNA como fuente de verdad para evitar 2 casos.
+       MOVIDA a experimental/100040_cisa_kev.xml — NO se carga en produccion.
+       Motivo: decision de arquitectura pendiente (fuente de verdad KEV: regla
+       de Wazuh vs enriquecimiento en la App — nunca resuelta, ver D-KEV en
+       EXPLICACION_DEL_TUNING.docx §11/§15) + la lista kriptome-cisa-kev
+       entregada en este repo es un FIXTURE de prueba (3 CVEs fijos), no el
+       feed real. Ver experimental/100040_cisa_kev.xml para el detalle
+       completo de la regla, su validacion XML y sus dependencias.
        ======================================================================= -->
-  <rule id="100040" level="13">
-    <if_sid>23504,23505,23506</if_sid>
-    <list field="vulnerability.cve" lookup="match_key">etc/lists/kriptome-cisa-kev</list>
-    <description>Kriptome: CVE bajo explotacion activa (CISA KEV): $(vulnerability.cve) en $(vulnerability.package.name)</description>
-    <mitre><id>T1190</id></mitre>
-    <group>vulnerability-detector,kriptome_correlation,kriptome_critical,</group>
-  </rule>
 
   <!-- =======================================================================
-       AISLAMIENTO MULTI-TENANT EN CORRELACIONES  [NO VERIFICADO - PEND-LOGTEST]
+       AISLAMIENTO MULTI-TENANT EN CORRELACIONES  [ESTADO: PENDIENTE]
        ==
        RIESGO: las correlaciones por same_source_ip / same_field ipAddress
        (nativas 5712/5720/5763/60204 y las custom de arriba) acumulan por valor
@@ -181,7 +194,7 @@
        <rule id="100011" level="10" frequency="$KR_BF_FREQ" timeframe="$KR_BF_TIME">
          <if_matched_sid>60122</if_matched_sid>
          <same_field>win.eventdata.targetUserName</same_field>
-         <same_field>agent.labels.client_id</same_field>   ~ NO VERIFICADO ~
+         <same_field>agent.labels.client_id</same_field>   ~ ESTADO: PENDIENTE ~
          ...
        </rule>
        ======================================================================= -->

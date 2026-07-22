@@ -1,0 +1,49 @@
+# AUTH_BRUTEFORCE_SUCCESS
+# Login exitoso tras un ataque de fuerza bruta -- el cambio material mas
+# critico de autenticacion (doc 02 Escenario C). Cubre tanto SSH como
+# Windows: son el mismo case_type de negocio con dos rutas de deteccion.
+
+case_type: AUTH_BRUTEFORCE_SUCCESS
+
+source_rules:
+  - rule_id: "100012"
+    wazuh_family: SSH
+    validation_status: VALIDADO-XML
+    note: "if_sid=5715 + if_matched_sid=100010 + same_source_ip; timeframe=600"
+  - rule_id: "100013"
+    wazuh_family: "Windows auth"
+    validation_status: VALIDADO-XML
+    note: "if_sid=60106 + if_matched_sid=60204 + same_field win.eventdata.ipAddress; timeframe=600"
+
+fingerprint_fields:
+  - tenant_id
+  - asset_id
+  - case_type
+  - source_ip
+
+dedupe_window: PT10M   # timeframe=600 de ambas reglas
+
+auto_close_after: null   # CRITICAL -- nunca se auto-cierra, requiere cierre humano
+
+reopen_policy:
+  reopens_if: "nuevo evento con el mismo fingerprint dentro de 24h del cierre"
+  action: "reabre el caso existente, NO crea uno nuevo"
+
+material_changes:
+  - "nuevo source_ip distinto al que origino el caso (podria ser otro atacante)"
+  - "el activo pasa de criticidad media/baja a alta/critica"
+  - "el mismo source_ip repite el patron contra otro asset del mismo tenant"
+
+routing:
+  wazuh_route: CRITICAL
+  client_priority_level: critico
+  quiet_hours_apply: false
+  notification_template: "5.2"   # DOCUMENTOS/07_COMUNICACION_CON_EL_CLIENTE.docx
+
+human_review_required: true   # doc 04 A.3: CRITICAL siempre humano, IA no descarta
+
+known_limitations:
+  - "Aislamiento multi-tenant del CONTEO (no de la atribucion del caso) es PENDIENTE -- ver specifications/tenant_resolution.md §2"
+  - "Depende de 100010 (SSH) / 60204 (Windows) como if_matched_sid; ver rule_id de esas reglas para su propio estado"
+
+policy_validation_status: DISEÑADO

@@ -1,0 +1,68 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://kriptome.internal/specifications/case.schema.json",
+  "title": "Case",
+  "description": "Un caso Kriptome: la unidad de trabajo del sistema (doc 03: 'ALERTA != CASO'). Se abre por case_fingerprint (client_id + asset_id + case_type + campo variable de la familia, ver routing_matrix.csv columna 'Fingerprint'). Contrato de datos -- NO implica un motor de casos funcionando; el motor real (Kriptome App) está fuera de alcance de este repo.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["case_id", "tenant_id", "asset_id", "case_type", "status", "opened_at", "event_count", "fingerprint"],
+  "properties": {
+    "case_id": {
+      "type": "string",
+      "pattern": "^KRP-[0-9]{4}-[0-9]{6}$",
+      "description": "Formato usado en las plantillas de correo (DOCUMENTOS/07_COMUNICACION_CON_EL_CLIENTE.docx), p. ej. KRP-2026-000481."
+    },
+    "tenant_id": { "type": "string" },
+    "asset_id": { "type": "string" },
+    "case_type": {
+      "type": "string",
+      "description": "Debe existir como case_type en policies/case_types/*.yaml y en routing_matrix.csv. Un case_type sin política asociada no debería poder abrir un caso -- ver case_type_policy.example.yaml."
+    },
+    "fingerprint": {
+      "type": "string",
+      "description": "Valor concreto del case_fingerprint (client_id+asset_id+case_type+campo variable) que agrupó este caso. No incluye timestamp ni contadores (doc 02 §6: 'Nunca incluyen timestamp ni contadores')."
+    },
+    "status": {
+      "type": "string",
+      "enum": ["open", "pending_human_review", "pending_client_response", "closed_resolved", "closed_false_positive", "closed_auto"]
+    },
+    "priority_level": {
+      "type": ["string", "null"],
+      "enum": ["informativo", "atencion", "urgente", "critico", null],
+      "description": "Nivel visible al cliente (DOCUMENTOS/07 §1). Null antes de la primera clasificación."
+    },
+    "opened_at": { "type": "string", "format": "date-time" },
+    "closed_at": { "type": ["string", "null"], "format": "date-time" },
+    "event_count": {
+      "type": "integer",
+      "minimum": 1,
+      "description": "Contador de eventos agrupados en este caso (event_count++ en repeticiones sin cambio material, doc 03 nivel de control 5)."
+    },
+    "material_changes": {
+      "type": "array",
+      "description": "Historial de cambios materiales detectados (ver policies/case_types/*.yaml campo material_changes para qué cuenta como tal en cada case_type).",
+      "items": {
+        "type": "object",
+        "required": ["detected_at", "description"],
+        "properties": {
+          "detected_at": { "type": "string", "format": "date-time" },
+          "description": { "type": "string" }
+        }
+      }
+    },
+    "human_review_required": {
+      "type": "boolean",
+      "description": "Ver policies/case_types/*.yaml. Para CRITICAL siempre true (doc 03: 'la IA no descarta')."
+    },
+    "ai_input_hash": {
+      "type": ["string", "null"],
+      "description": "Hash del contexto mínimo enviado a la IA (doc 02 §8: case_id, tipo, event_count, material_change, asset_alias, criticality, resumen_IOC, procedure_id, pasos_permitidos, recipient_level). Reutilizar salida si el hash no cambió -- evita re-pagar la IA en repeticiones."
+    },
+    "assigned_operator": { "type": ["string", "null"] },
+    "notifications_sent": {
+      "type": "array",
+      "items": { "type": "string" },
+      "description": "Lista de message_key ya enviados para este caso (idempotencia, doc 03 nivel de control 7: 'mismo contexto -> no repagar IA; reintento de envío -> 0 correos duplicados')."
+    }
+  }
+}

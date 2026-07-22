@@ -1,0 +1,62 @@
+# FIM_CRITICAL_PATH
+# Cambio de integridad de archivos en una ruta sensible (no whitelisted).
+# Distinto de MALWARE_CONFIRMED: aqui no hay hash malicioso conocido, es
+# un cambio en una ruta que el cliente/Kriptome marco como critica.
+
+case_type: FIM_CRITICAL_PATH
+
+source_rules:
+  - rule_id: "550"
+    wazuh_family: FIM
+    validation_status: VALIDADO-DOCUMENTALMENTE
+    note: "Integrity checksum changed (nativa, decoded_as=syscheck_integrity_changed)"
+  - rule_id: "553"
+    wazuh_family: FIM
+    validation_status: VALIDADO-DOCUMENTALMENTE
+    note: "File deleted (nativa)"
+  - rule_id: "554"
+    wazuh_family: FIM
+    validation_status: VALIDADO-DOCUMENTALMENTE
+    note: "File added (nativa)"
+  - rule_id: "100030"
+    wazuh_family: FIM
+    validation_status: VALIDADO-XML
+    note: >-
+      Regla CUSTOM de whitelist -- INVERSA a este case_type: 100030 es la
+      que SILENCIA (level 0) los paths de puro ruido. Un evento que pasa
+      por 100030 NUNCA debe llegar a FIM_CRITICAL_PATH. Se referencia aqui
+      para dejar explicito el contraste.
+
+fingerprint_fields:
+  - tenant_id
+  - asset_id
+  - case_type
+  - file_path
+
+dedupe_window: PT15M   # DISEÑADO -- no hay timeframe nativo en 550/553/554
+
+auto_close_after: PT168H   # 7 dias, SOLO si nunca hubo material_change y
+                            # el cliente respondio "A" (cambio esperado/legitimo)
+
+reopen_policy:
+  reopens_if: "nuevo cambio en el MISMO file_path dentro de las 24h posteriores al cierre"
+  action: "reabre el caso existente, NO crea uno nuevo"
+
+material_changes:
+  - "nuevo binario aparece en un path de ejecucion (/bin, /sbin, System32, etc.)"
+  - "cambio en un mecanismo de persistencia/arranque (tareas programadas, autoruns, servicios)"
+  - "el hash del archivo nuevo/modificado coincide con la lista malicious-ioc (escalaria a MALWARE_CONFIRMED, no queda en FIM_CRITICAL_PATH)"
+
+routing:
+  wazuh_route: CANDIDATE
+  client_priority_level: urgente   # "inmediata si path critico" segun routing_matrix.csv
+  quiet_hours_apply: true          # no es CRITICAL por si solo; sube a critico solo con material_change
+  notification_template: "5.5"
+
+human_review_required: false   # solo se vuelve true si aparece un material_change de la lista de arriba
+
+known_limitations:
+  - "match_key de la whitelist (100030) es igualdad EXACTA -- no cubre directorios/regex; ruido de directorio se filtra en agent.conf, no aqui (ver REGLAS_TUNEADAS/agent-conf/kriptome-baseline_agent.conf)"
+  - "Que una ruta sea 'critica' (para decidir routing urgente vs digest) es una clasificacion de la App/CMDB por asset, no un campo que Wazuh produzca -- este dato no viene en el evento normalizado"
+
+policy_validation_status: DISEÑADO

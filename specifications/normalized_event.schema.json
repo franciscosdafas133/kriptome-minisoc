@@ -1,0 +1,92 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://kriptome.internal/specifications/normalized_event.schema.json",
+  "title": "NormalizedEvent",
+  "description": "Forma normalizada de un evento de Wazuh, sin importar la familia de origen (SSH, Windows, FIM, M365, etc.). Es el contrato de ENTRADA del extractor de campos descrito en REGLAS_TUNEADAS/routing/diccionario_campos_enriquecimiento.csv. Los campos aquí corresponden a los verificados contra decoders/reglas reales de Wazuh v4.14.6 (ver REGLAS_TUNEADAS/GUIA_CAMPOS_ENRIQUECIMIENTO.docx); no se inventan campos que no existan en el evento real. NO es un schema implementado — es el contrato para cuando se construya el extractor (fuera de alcance de este repo, ver README).",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["event_id", "tenant_id", "timestamp", "source", "rule_id", "rule_level"],
+  "properties": {
+    "event_id": {
+      "type": "string",
+      "description": "Identificador único del evento (equivalente a event_hash en el diseño de dedupe, doc 03 nivel de control 1). No es el rule_id."
+    },
+    "tenant_id": {
+      "type": "string",
+      "description": "Resuelto SIEMPRE por backend a partir de agent_id -> labels, nunca aceptado directo del frontend. Ver specifications/tenant_resolution.md."
+    },
+    "asset_id": {
+      "type": ["string", "null"],
+      "description": "Identificador del activo/equipo (label asset_id del agente). Null solo si el agente aún no fue provisto de labels (estado que debe generar cuarentena, ver tenant_resolution.md)."
+    },
+    "timestamp": {
+      "type": "string",
+      "format": "date-time",
+      "description": "Momento del evento en el origen, no de la ingesta."
+    },
+    "source": {
+      "type": "string",
+      "enum": ["wazuh_syslog", "wazuh_eventchannel", "wazuh_syscheck", "wazuh_rootcheck", "wazuh_sca", "wazuh_vulnerability_detector", "wazuh_virustotal", "wazuh_firewall", "wazuh_office365", "wazuh_agent_status"],
+      "description": "Familia/mecanismo de origen del evento. No confundir con case_type (que es la clasificación de negocio)."
+    },
+    "case_type": {
+      "type": ["string", "null"],
+      "description": "Clasificación de negocio resuelta contra REGLAS_TUNEADAS/routing/routing_matrix.csv por rule_id. Null si el rule_id no está en la matriz (evento no enrutado; debe ir a cola de revisión, no descartarse en silencio)."
+    },
+    "rule_id": {
+      "type": "string",
+      "description": "ID de regla Wazuh que disparó (nativo o custom, p. ej. '5763' o '100012')."
+    },
+    "rule_level": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 16
+    },
+    "rule_groups": {
+      "type": "array",
+      "items": { "type": "string" },
+      "description": "Grupos de la regla, incluye los grupos kriptome_* de routing (kriptome_candidate, kriptome_critical, etc.) cuando aplica."
+    },
+    "source_ip": {
+      "type": ["string", "null"],
+      "description": "Campo srcip / win.eventdata.ipAddress / office365.ClientIP según familia. Ver diccionario_campos_enriquecimiento.csv para el mapeo exacto por familia."
+    },
+    "destination_ip": {
+      "type": ["string", "null"],
+      "description": "Campo dstip (firewall) o win.eventdata.destinationIp (Sysmon EID3)."
+    },
+    "target_user": {
+      "type": ["string", "null"],
+      "description": "Usuario objetivo/afectado: dstuser (SSH), win.eventdata.targetUserName (Windows/AD), office365.UserId (M365), srcuser (sudo, con la limitación documentada de que el comando ejecutado no es un campo separado)."
+    },
+    "file_path": {
+      "type": ["string", "null"],
+      "description": "syscheck.path (FIM) o win.eventdata.image / office365.SourceFileName según familia."
+    },
+    "file_hash": {
+      "type": ["string", "null"],
+      "description": "syscheck.sha256_after (FIM) o virustotal.source.file (AV). No se asume que siempre exista sha256 — algunas familias solo dan md5/sha1."
+    },
+    "cve": {
+      "type": ["string", "null"],
+      "description": "vulnerability.cve, verificado en rules/0520-vulnerability-detector_rules.xml del ruleset oficial."
+    },
+    "mitre_ids": {
+      "type": "array",
+      "items": { "type": "string" },
+      "description": "IDs MITRE ATT&CK ya presentes en la regla que disparó (bloque <mitre><id> del XML)."
+    },
+    "raw_event_reference": {
+      "type": "string",
+      "description": "Puntero al evento original en el Indexer (no el log completo embebido aquí) -- para que el operador o la App puedan recuperar el detalle completo sin que este objeto normalizado cargue el payload entero."
+    },
+    "enrichment_pending": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "enum": ["geoip", "ip_reputation", "hash_reputation", "domain_reputation", "cve_description_es", "office365_recordtype_translation"]
+      },
+      "description": "Lista de enriquecimientos externos que este evento requiere y AÚN no se resolvieron (ver columna 'EnriquecimientoExternoNecesario' del diccionario). Ninguno de estos es nativo de Wazuh."
+    }
+  }
+}

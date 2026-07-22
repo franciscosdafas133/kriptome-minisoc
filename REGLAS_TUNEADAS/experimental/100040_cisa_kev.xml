@@ -1,0 +1,54 @@
+<!--
+  ===========================================================================
+  EXPERIMENTAL — Regla 100040: CVE bajo explotacion activa (CISA KEV)
+  ===========================================================================
+  ESTADO: EXPERIMENTAL — NO cargada en produccion.
+
+  Este archivo vive en experimental/ y NO esta referenciado por ningun
+  <rule_dir> del snippet de despliegue (ver wazuh/config/ossec.conf.ruleset.snippet.xml).
+  Para activarla habria que copiarla a etc/rules/ y añadir su <rule_dir>,
+  paso que este repo NO ejecuta ni recomienda sin antes resolver la decision
+  de arquitectura de abajo.
+
+  POR QUE ES EXPERIMENTAL (no un bug, una decision de producto sin tomar):
+  El principio de arquitectura del proyecto (doc 01 §2, "arquitectura #8") es
+  que el enriquecimiento CISA KEV ocurre EN LA KRIPTOME APP, despues de
+  indexar, no como una segunda regla de Wazuh. Si esta regla se activa EN
+  PARALELO a ese enriquecimiento de la App, el mismo evento (un CVE que
+  entra al catalogo KEV) puede abrir DOS casos distintos: uno por la regla
+  100040 en Wazuh y otro por el enriquecimiento de la App. Eso viola el
+  principio "1 alerta != 2 casos" (doc 03).
+
+  DECISION PENDIENTE (marcada D-KEV en EXPLICACION_DEL_TUNING.docx §11/§15):
+  elegir UNA fuente de verdad para KEV:
+    (a) Esta regla de Wazuh (requiere fuente CDB confiable, ver mas abajo), o
+    (b) Enriquecimiento en la Kriptome App (coincide con la arquitectura #8).
+  Hasta que se tome esa decision, la regla se mantiene aqui, deshabilitada.
+
+  VALIDACION TECNICA XML (lo que SI esta comprobado, independiente de la
+  decision de producto): la version corregida de la regla es sintacticamente
+  correcta y usa un campo real (`vulnerability.cve`, usado tambien por la
+  regla nativa 23501) en vez del campo `cisa_kev` original que NO existe en
+  tiempo de evaluacion de regla. Ver comentario historico completo en
+  wazuh/rules/kriptome_local_rules.xml (seccion "ELIMINADAS Y MOVIDAS").
+  Estado de esta verificacion puntual: VALIDADO-XML.
+  Estado de la regla como PIEZA DE PRODUCCION: EXPERIMENTAL (decision
+  de arquitectura pendiente, no solo verificacion tecnica).
+
+  DEPENDENCIA: esta regla necesita la lista CDB etc/lists/kriptome-cisa-kev.
+  Esa lista, TAL COMO SE ENTREGA EN ESTE REPO (lists/kriptome-cisa-kev),
+  es un FIXTURE DE PRUEBA con 3 CVE-IDs de ejemplo fijos — NO es el feed
+  real. Activar esta regla con el fixture produciria falsos negativos
+  (cualquier CVE en KEV real que no sean esos 3 no dispararia). Antes de
+  activar en produccion: automatizar el cron diario contra el feed CISA KEV
+  real (comando de referencia en GUIA_LISTAS.docx) y reemplazar el fixture.
+  ===========================================================================
+-->
+
+<rule id="100040" level="13">
+  <if_sid>23504,23505,23506</if_sid>
+  <list field="vulnerability.cve" lookup="match_key">etc/lists/kriptome-cisa-kev</list>
+  <description>Kriptome: CVE bajo explotacion activa (CISA KEV): $(vulnerability.cve) en $(vulnerability.package.name)</description>
+  <mitre><id>T1190</id></mitre>
+  <group>vulnerability-detector,kriptome_correlation,kriptome_critical,kriptome_experimental,</group>
+</rule>

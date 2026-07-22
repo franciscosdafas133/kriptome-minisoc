@@ -1,0 +1,70 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://kriptome.internal/specifications/client_notification.schema.json",
+  "title": "ClientNotification",
+  "description": "Estructura de UN correo al cliente, alineada con las 15 plantillas de DOCUMENTOS/07_COMUNICACION_CON_EL_CLIENTE.docx (documento NO editado -- este schema es un contrato de datos que refleja su estructura fija, no un reemplazo). No implica envío real de correo: ver README para el alcance de este repo.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["case_id", "tenant_id", "message_type", "priority_level", "template_id", "recipient_level", "message_key"],
+  "properties": {
+    "case_id": { "type": "string", "pattern": "^KRP-[0-9]{4}-[0-9]{6}$" },
+    "tenant_id": { "type": "string" },
+    "message_type": {
+      "type": "string",
+      "enum": ["alerta_inicial", "actualizacion", "recordatorio", "cierre", "digest_semanal", "informe_mensual"],
+      "description": "Corresponde a las plantillas 5.1-5.10 (alerta_inicial por case_type), 5.11 (actualizacion), 5.12 (recordatorio), 5.13 (cierre), 5.14 (digest_semanal), 5.15 (informe_mensual) del doc 07."
+    },
+    "priority_level": {
+      "type": "string",
+      "enum": ["informativo", "atencion", "urgente", "critico"]
+    },
+    "template_id": {
+      "type": "string",
+      "description": "Referencia a la sección de la plantilla usada, p. ej. '5.2' (login exitoso tras brute force). Debe existir en DOCUMENTOS/07_COMUNICACION_CON_EL_CLIENTE.docx §5."
+    },
+    "recipient_level": {
+      "type": "string",
+      "enum": ["primario", "secundario", "ambos", "secundario_por_canal_alterno"],
+      "description": "'secundario_por_canal_alterno' es el caso especial de correo comprometido (plantilla 5.10): NUNCA se notifica al buzón afectado."
+    },
+    "message_key": {
+      "type": "string",
+      "description": "Clave de idempotencia (doc 03 nivel de control 7). Un reintento de envío con el mismo message_key no debe producir un segundo correo."
+    },
+    "subject": {
+      "type": "string",
+      "description": "Debe incluir [case_id] al inicio, formato usado en todas las plantillas del doc 07."
+    },
+    "body_sections": {
+      "type": "object",
+      "description": "Estructura fija de toda plantilla del doc 07 §2 (reglas de redacción obligatorias).",
+      "required": ["nivel_de_atencion", "que_paso", "por_que_importa", "que_debe_hacer_usted", "que_esta_haciendo_kriptome"],
+      "properties": {
+        "nivel_de_atencion": { "type": "string" },
+        "que_paso": { "type": "string" },
+        "por_que_importa": { "type": "string" },
+        "que_debe_hacer_usted": { "type": "string" },
+        "que_esta_haciendo_kriptome": { "type": "string" },
+        "como_responder": {
+          "type": ["object", "null"],
+          "description": "Bloque A/B/C. Null solo en digest/informe mensual, que no piden respuesta A/B/C."
+        },
+        "detalle_soporte_tecnico": {
+          "type": "string",
+          "description": "Sección final con IDs/IPs/hashes crudos, para reenviar al soporte técnico del cliente si lo tiene. NUNCA va en las secciones anteriores (regla de redacción: sin jerga en el cuerpo principal)."
+        }
+      }
+    },
+    "language": { "type": "string", "const": "es-PE", "description": "Español, en lenguaje simple, dirigido a un dueño de PyME peruano (no técnico) -- ver doc 07 §2." },
+    "sent_at": { "type": ["string", "null"], "format": "date-time" },
+    "delivery_status": {
+      "type": "string",
+      "enum": ["draft", "queued", "sent", "failed", "suppressed_quiet_hours", "suppressed_duplicate"],
+      "description": "'draft' es el único estado que este repo puede producir hoy -- no hay envío real de correo implementado (ver README §9)."
+    },
+    "out_of_band_confirmation_required": {
+      "type": "boolean",
+      "description": "true para acciones sensibles propuestas (bloquear/aislar/apagar) -- doc 07 §4: confirmación telefónica obligatoria, nunca solo por correo."
+    }
+  }
+}

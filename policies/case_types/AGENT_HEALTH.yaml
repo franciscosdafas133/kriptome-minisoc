@@ -1,0 +1,64 @@
+# AGENT_HEALTH
+# Un sensor deja de reportar. Familia 14 (Salud del sensor), añadida en la
+# revision end-to-end (ver REGLAS_TUNEADAS/routing/routing_matrix.csv).
+# Cubre tanto la apertura (AGENT_DOWN) como el cierre automatico (503).
+
+case_type: AGENT_HEALTH
+
+source_rules:
+  - rule_id: "503"
+    wazuh_family: "Salud sensor"
+    validation_status: VALIDADO-XML
+    note: "Agent started -- CIERRA el caso AGENT_DOWN si estaba abierto (decoders/0200-ossec_decoders.xml)"
+  - rule_id: "504"
+    wazuh_family: "Salud sensor"
+    validation_status: VALIDADO-XML
+    note: "Agent disconnected -- ABRE el caso"
+  - rule_id: "505"
+    wazuh_family: "Salud sensor"
+    validation_status: VALIDADO-XML
+    note: "Agent removed -- caso distinto (baja de agente, no caida); requiere confirmar con el cliente si fue intencional"
+  - rule_id: "506"
+    wazuh_family: "Salud sensor"
+    validation_status: VALIDADO-XML
+    note: "Agent stopped -- equivalente a 504 para efectos de este case_type"
+
+fingerprint_fields:
+  - tenant_id
+  - asset_id
+  - case_type
+  # NOTA: a diferencia de otras familias, aqui NO hay un campo variable
+  # adicional (srcip, cve, etc.) -- el fingerprint es por asset, porque lo
+  # que se correlaciona es "este equipo especifico dejo de reportar".
+
+dedupe_window: PT15M
+# Ver REGLAS_TUNEADAS/routing/routing_matrix.csv fila 504: "App vigila
+# ademas keepalive >15min" -- este valor viene de ahi, no es arbitrario.
+
+auto_close_after: null
+# No se auto-cierra por tiempo -- se cierra por el EVENTO 503 (reconexion),
+# ver reopen_policy. Es el unico case_type de estas 5 politicas donde el
+# cierre es otro evento de Wazuh, no un timeout ni una respuesta del cliente.
+
+reopen_policy:
+  reopens_if: "no aplica -- este case_type se ABRE con 504/506 y se CIERRA con 503, nunca se reabre un caso ya cerrado por 503; una nueva desconexion abre un caso NUEVO"
+  action: "N/A"
+
+material_changes:
+  - "el agente sigue caido mas de 15 minutos (umbral de keepalive)"
+  - "el asset caido es de criticidad alta/critica"
+  - "varios agentes del mismo tenant caen dentro de la misma ventana (posible incidente de red/energia, no fallas independientes)"
+
+routing:
+  wazuh_route: CANDIDATE
+  client_priority_level: atencion   # sube a urgente con material_change (asset critico o sigue caido)
+  quiet_hours_apply: true           # salvo material_change
+  notification_template: "5.9"
+
+human_review_required: false   # sube a true si el material_change es "varios agentes caen a la vez"
+
+known_limitations:
+  - "Wazuh NO expone un campo de 'motivo' de la desconexion (ver diccionario_campos_enriquecimiento.csv fila 'Salud sensor'): solo se sabe QUE se desconecto, no POR QUE -- eso lo indaga el operador con el cliente, no se puede automatizar"
+  - "El umbral de 15 minutos (keepalive) es una politica de la App, no un parametro nativo de Wazuh -- Wazuh solo emite el evento 504/506 al momento de la desconexion detectada por el Manager"
+
+policy_validation_status: DISEÑADO

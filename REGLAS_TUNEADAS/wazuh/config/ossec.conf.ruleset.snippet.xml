@@ -14,11 +14,23 @@
      lista que esas reglas referencian no esta declarada, analysisd NO ARRANCA.
 
   CORRECCIONES vs 02_Set_Reglas.md seccion 6:
-   - Se añaden los <list> de kriptome (fim-whitelist, cisa-kev). Los archivos
-     deben copiarse a etc/lists/ ANTES de reiniciar (ver GUIA_DE_DESPLIEGUE).
+   - Se añade el <list> de kriptome-fim-whitelist (usado por la regla activa
+     100030). Ese archivo debe copiarse a etc/lists/ ANTES de reiniciar
+     (ver GUIA_DE_DESPLIEGUE).
    - rule_exclude por parque: SOLO tecnologias que el cliente NO usa. Se aplica
      por deployment; si un cliente SI usa O365/Docker/etc, quita su linea.
    - El orden importa: primero decoders/rules oficiales, luego custom.
+
+  NOTA v1.2.0 — kriptome-cisa-kev y la regla 100040:
+  la regla 100040 (que consumia esta lista) se movio a
+  REGLAS_TUNEADAS/experimental/100040_cisa_kev.xml (estado EXPERIMENTAL,
+  decision de arquitectura KEV pendiente — ver ese archivo). Por eso el
+  <rule_dir>etc/rules</rule_dir> de mas abajo NO carga experimental/, y este
+  snippet NO declara <list>etc/lists/kriptome-cisa-kev</list>: el set activo
+  (wazuh/rules/kriptome_local_rules.xml) no la necesita. Si en el futuro se activa
+  100040, hay que: (a) copiar el archivo de experimental/ a etc/rules/,
+  (b) añadir aqui <list>etc/lists/kriptome-cisa-kev</list>, y (c) reemplazar
+  el fixture de la lista por el feed real (ver lists/kriptome-cisa-kev.FIXTURE.md).
 -->
 <ruleset>
   <!-- Decoders y reglas oficiales -->
@@ -34,9 +46,8 @@
   <list>etc/lists/malicious-ioc/malicious-ip</list>
   <list>etc/lists/malicious-ioc/malicious-domains</list>
 
-  <!-- Listas CDB de Kriptome (copiar los archivos antes del restart) -->
+  <!-- Lista CDB de Kriptome usada por el set ACTIVO (regla 100030) -->
   <list>etc/lists/kriptome-fim-whitelist</list>
-  <list>etc/lists/kriptome-cisa-kev</list>
 
   <!-- Decoders y reglas custom de Kriptome -->
   <decoder_dir>etc/decoders</decoder_dir>

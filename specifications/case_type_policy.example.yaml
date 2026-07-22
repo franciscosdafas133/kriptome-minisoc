@@ -1,0 +1,64 @@
+# Forma general de una politica de case_type (contrato, no implementacion).
+# Cada archivo en policies/case_types/*.yaml debe seguir esta forma.
+# Este archivo de ejemplo usa AUTH_BRUTEFORCE_SUCCESS (regla 100012/100013 --
+# ver REGLAS_TUNEADAS/wazuh/rules/kriptome_local_rules.xml) como caso real
+# del propio ruleset, no un caso inventado.
+
+case_type: AUTH_BRUTEFORCE_SUCCESS
+
+# De donde sale este case_type -- referencia cruzada obligatoria, nunca un
+# case_type "flotante" sin regla que lo produzca.
+source_rules:
+  - rule_id: "100012"
+    wazuh_family: SSH
+    validation_status: VALIDADO-XML   # ver specifications/validation_statuses.md
+  - rule_id: "100013"
+    wazuh_family: "Windows auth"
+    validation_status: VALIDADO-XML
+
+# Campos que agrupan eventos en el MISMO caso (doc 02 §6: nunca timestamp
+# ni contadores). Debe coincidir con la columna "Fingerprint (case_type)"
+# de REGLAS_TUNEADAS/routing/routing_matrix.csv para las reglas de origen.
+fingerprint_fields:
+  - tenant_id
+  - asset_id
+  - case_type
+  - source_ip
+
+# Ventana de tiempo dentro de la cual eventos con el mismo fingerprint se
+# consideran el MISMO caso (no abren uno nuevo).
+dedupe_window: PT10M   # ISO 8601 duration; 10 minutos, alineado al
+                       # timeframe=600 de las reglas 100012/100013
+
+# Tras cuanto tiempo sin nueva actividad el caso se cierra solo, si nadie
+# lo cerro antes. null si nunca se auto-cierra (requiere cierre humano
+# explicito -- es el caso de CRITICAL).
+auto_close_after: null   # CRITICAL nunca se auto-cierra (doc 04 A.3)
+
+# Que pasa si llega un evento nuevo despues de que el caso ya se cerro.
+reopen_policy:
+  reopens_if: "nuevo evento con el mismo fingerprint dentro de 24h del cierre"
+  action: "reabre el caso existente, NO crea uno nuevo"
+
+# Que cuenta como cambio material para ESTE case_type (doc 02 §7). Debe
+# ser una lista concreta, no una descripcion vaga.
+material_changes:
+  - "nuevo source_ip distinto al que origino el caso"
+  - "el activo pasa de criticidad media/baja a alta/critica"
+
+# A donde se enruta (doc 02 tabla de decision por nivel+criticidad, y
+# DOCUMENTOS/07 tabla de 4 niveles). Debe listar el nivel visible al
+# cliente, no solo el nivel interno de Wazuh.
+routing:
+  wazuh_route: CRITICAL
+  client_priority_level: critico
+  quiet_hours_apply: false   # CRITICAL nunca respeta quiet hours (doc 03 §7)
+  notification_template: "5.2"   # DOCUMENTOS/07_COMUNICACION_CON_EL_CLIENTE.docx §5.2
+
+# Si un humano DEBE revisar antes de comunicar (doc 04 A.3: la IA nunca
+# descarta CRITICAL).
+human_review_required: true
+
+# Estado de validacion de ESTA POLITICA como conjunto (no de las reglas
+# individuales, que tienen su propio validation_status arriba).
+policy_validation_status: DISEÑADO   # ver specifications/validation_statuses.md
