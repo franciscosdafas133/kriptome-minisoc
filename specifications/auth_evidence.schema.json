@@ -1,0 +1,57 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://kriptome.internal/specifications/auth_evidence.schema.json",
+  "title": "AuthEvidence",
+  "description": "Evidencia estructurada de autenticación para un caso (AUTH_BRUTEFORCE_SUCCESS y afines). Existe específicamente para resolver una limitación real de las reglas 100011/100013 (ver REGLAS_TUNEADAS/wazuh/rules/kriptome_local_rules.xml y policies/case_types/AUTH_BRUTEFORCE_SUCCESS.yaml): la correlación nativa por IP (60204, que alimenta 100013) NO garantiza por sí sola que los intentos fallidos previos fueran contra la MISMA cuenta del login exitoso final -- solo garantiza la misma IP. Este schema formaliza esa distinción con el campo matching_user_verified.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["case_id", "matching_user_verified", "correlation_basis"],
+  "properties": {
+    "case_id": { "type": "string", "pattern": "^KRP-[0-9]{4}-[0-9]{6}$" },
+    "source_ip": { "type": ["string", "null"] },
+    "target_user": {
+      "type": ["string", "null"],
+      "description": "Cuenta del login EXITOSO (si lo hubo). No asumir que es la misma cuenta de los intentos fallidos sin matching_user_verified=true."
+    },
+    "failed_attempt_count": {
+      "type": ["integer", "null"],
+      "minimum": 0,
+      "description": "Cuántos intentos fallidos se contaron para este caso, según la base de correlación (ver correlation_basis)."
+    },
+    "successful_login_count": { "type": ["integer", "null"], "minimum": 0 },
+    "failure_event_ids": {
+      "type": "array",
+      "items": { "type": "string" },
+      "description": "IDs de los eventos de fallo individuales que componen el conteo -- permite que el operador o la App verifiquen manualmente target_user de cada uno."
+    },
+    "success_event_id": {
+      "type": ["string", "null"],
+      "description": "ID del evento de login exitoso (rule_id 100012/100013)."
+    },
+    "first_failure_at": { "type": ["string", "null"], "format": "date-time" },
+    "last_failure_at": { "type": ["string", "null"], "format": "date-time" },
+    "successful_login_at": { "type": ["string", "null"], "format": "date-time" },
+    "logon_type": {
+      "type": ["string", "null"],
+      "description": "Valor crudo de win.eventdata.logonType (p. ej. '3', '10')."
+    },
+    "logon_type_label": {
+      "type": ["string", "null"],
+      "description": "Traducción legible (p. ej. '3'->'acceso por red', '10'->'escritorio remoto'). Ver REGLAS_TUNEADAS/GUIA_CAMPOS_ENRIQUECIMIENTO.docx."
+    },
+    "workstation_name": { "type": ["string", "null"] },
+    "source_port": { "type": ["string", "null"] },
+
+    "matching_user_verified": {
+      "type": "boolean",
+      "description": "true SOLO si se comparó explícitamente win.eventdata.targetUserName (o dstuser en SSH) de CADA evento fallido contra el target_user del evento exitoso, y todos coinciden. false si no se hizo esa comparación o si se hizo y NO coinciden todos. Este campo es OBLIGATORIO y determina qué texto es válido en una notificación al cliente (ver regla crítica de comunicación abajo)."
+    },
+    "correlation_basis": {
+      "type": "string",
+      "enum": ["same_source_ip", "same_target_user", "same_source_ip_and_target_user"],
+      "description": "Sobre qué campo(s) se hizo la correlación que generó failed_attempt_count. 'same_source_ip' es el caso de 100013 (vía nativa 60204: correlaciona por win.eventdata.ipAddress, NO por cuenta) -- con esta base, matching_user_verified normalmente será false salvo que se haga la verificación adicional descrita en policies/case_types/AUTH_BRUTEFORCE_SUCCESS.yaml. 'same_target_user' es el caso de 100011 (correlaciona por win.eventdata.targetUserName directamente)."
+    }
+  },
+
+  "$comment": "REGLA CRÍTICA DE COMUNICACIÓN (normativa, no una restricción de validación JSON Schema -- aplica a quien redacte o genere el texto de body_sections.datos_principales en client_notification.schema.json): NO se puede escribir 'Se realizaron N intentos fallidos contra la cuenta {target_user}' salvo que matching_user_verified=true. Cuando matching_user_verified=false (p. ej. la correlación fue solo por IP, caso típico de 100013), el texto correcto es: 'Se detectaron N intentos fallidos desde la misma dirección IP y posteriormente un acceso exitoso utilizando la cuenta {target_user}' -- nunca afirmar que los N intentos fueron contra esa cuenta específica sin la verificación."
+}

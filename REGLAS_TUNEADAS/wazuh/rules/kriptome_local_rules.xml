@@ -2,11 +2,20 @@
   ===========================================================================
   Kriptome MiniSOC — Reglas custom TUNEADAS
   ===========================================================================
-  Version ......: 1.2.0
+  Version ......: 1.2.1
+                  1.2.1 = decision D-KEV RESUELTA: fuente de verdad KEV =
+                          enriquecimiento en la Kriptome App sobre las
+                          reglas nativas del Vulnerability Detector
+                          (23501/23504/23505/23506), consultando el feed
+                          CISA KEV solo cuando hay vulnerability.cve valido.
+                          100040 queda DESCARTADA para produccion (no solo
+                          experimental), ver
+                          policies/case_types/VULNERABILITY_KEV.yaml y
+                          experimental/100040_cisa_kev.xml.
                   1.2.0 = alineacion tecnica: vocabulario de estados normalizado,
                           100040 (CISA KEV) movida a experimental/ (deshabilitada;
-                          decision de arquitectura KEV pendiente), documentada
-                          equivalencia same_source_ip/same_srcip. Ver
+                          decision de arquitectura KEV pendiente en ese momento),
+                          documentada equivalencia same_source_ip/same_srcip. Ver
                           REPO_ALIGNMENT_REPORT.md y CHANGELOG.md.
                   1.1.0 = revision de despliegue: snippet ossec.conf con paridad
                           default v4.14.6, listas CDB en formato estricto,
@@ -130,6 +139,32 @@
        Equivalente Windows de 100012. No estaba en el doc pero es la misma
        logica de cambio material y Windows es la mitad del parque PyME.
        60106 = "Windows Logon Success"; 60204 = brute force por IP.
+
+       LIMITACION DOCUMENTADA (v1.3.0, no se modifica la regla sin
+       probarla antes en un Manager real):
+       100011 correlaciona los fallos contra UNA MISMA CUENTA usando
+       same_field=win.eventdata.targetUserName (linea de arriba en este
+       archivo): esa correlacion SI garantiza "misma cuenta" en sus eventos.
+       100013, en cambio, se apoya en la correlacion NATIVA 60204, que
+       agrupa por same_field=win.eventdata.ipAddress (misma IP), NO por
+       targetUserName. Por lo tanto 100013 NO demuestra por si sola que
+       todos los fallos previos contados por 60204 fueron contra la MISMA
+       cuenta que el login exitoso final: solo demuestra que vinieron de
+       la misma IP.
+       La verificacion de coincidencia de cuenta se realiza en Kriptome App
+       consultando los eventos fallidos relacionados (ver
+       specifications/auth_evidence.schema.json, campo
+       matching_user_verified): el backend futuro debe (1) recuperar los
+       fallos previos desde la misma IP, (2) comparar
+       win.eventdata.targetUserName de cada uno contra el target_user del
+       evento exitoso, (3) contar cuantos fallos coinciden con esa cuenta,
+       (4) fijar matching_user_verified segun el resultado, (5) generar la
+       redaccion correcta en la notificacion (ver policies/case_types/AUTH_BRUTEFORCE_SUCCESS.yaml
+       seccion auth_evidence_requirements). No se crea una nueva regla XML
+       que correlacione por IP+cuenta a la vez porque eso requeriria
+       probarla contra un Manager real primero (PEND-LOGTEST), y el prompt
+       de esta pasada de alineacion prohibe expresamente inventar reglas
+       sin esa prueba.
        ======================================================================= -->
   <rule id="100013" level="12" timeframe="600">
     <if_sid>60106</if_sid>
@@ -162,15 +197,19 @@
   </rule>
 
   <!-- =======================================================================
-       100040 — CVE bajo explotacion activa (CISA KEV)   [ESTADO: EXPERIMENTAL]
+       100040 — CVE bajo explotacion activa (CISA KEV)   [ESTADO: DESCARTADA-PARA-PRODUCCION]
        ==
-       MOVIDA a experimental/100040_cisa_kev.xml — NO se carga en produccion.
-       Motivo: decision de arquitectura pendiente (fuente de verdad KEV: regla
-       de Wazuh vs enriquecimiento en la App — nunca resuelta, ver D-KEV en
-       EXPLICACION_DEL_TUNING.docx §11/§15) + la lista kriptome-cisa-kev
-       entregada en este repo es un FIXTURE de prueba (3 CVEs fijos), no el
-       feed real. Ver experimental/100040_cisa_kev.xml para el detalle
-       completo de la regla, su validacion XML y sus dependencias.
+       MOVIDA a experimental/100040_cisa_kev.xml — NO se carga en produccion,
+       y NO se activara (decision D-KEV RESUELTA en v1.2.1). La fuente de
+       verdad KEV es el enriquecimiento en la Kriptome App sobre las reglas
+       NATIVAS 23501/23504/23505/23506, consultando el feed CISA KEV real
+       solo cuando hay vulnerability.cve valido — ver
+       policies/case_types/VULNERABILITY_KEV.yaml para el flujo completo y
+       specifications/enrichment_result.schema.json ($defs.kev_result) para
+       el contrato de datos. Este archivo se conserva solo como referencia
+       historica de la correccion XML (campo vulnerability.cve vs el
+       cisa_kev inexistente del set original), no como pieza pendiente de
+       activar. Ver experimental/100040_cisa_kev.xml para el detalle completo.
        ======================================================================= -->
 
   <!-- =======================================================================

@@ -4,6 +4,15 @@ Reporte de inventario y alineación técnica del repositorio `kriptome-minisoc` 
 
 Generado: 2026-07-22 · Wazuh base de referencia: v4.14.6 (verificado vía sparse-checkout oficial `wazuh/wazuh` tag `v4.14.6`, código fuente `src/analysisd/rules.c` incluido).
 
+**Actualización 2026-07-22 (misma fecha, segunda pasada):** tras subir la v1.2.0, se recibió una revisión externa del contenido del repositorio con una lista de correcciones. Se verificaron dos afirmaciones de esa revisión antes de aplicarlas:
+
+1. *"Existen documentos v3 listos para reemplazar los 00–07"* — se preguntó al usuario; confirmó que no existen tales documentos en este momento, se ignoró esa parte.
+2. *"Hay una decisión final de enviar un mensaje único sin A/B/C"* — se verificó `DOCUMENTOS/07_COMUNICACION_CON_EL_CLIENTE.docx` línea por línea (documento funcional, no editado): a la fecha de esta verificación, las 15 plantillas seguían especificando el flujo A/B/C. No existe ningún documento del repo que registre esa "decisión final". Se preguntó al usuario, quien instruyó aplicar el cambio de todos modos. Se aplicó en `specifications/client_notification.schema.json` **dejando la desalineación con el doc 07 documentada explícitamente en la descripción del schema**, para que no se asuma que el schema ya refleja el documento funcional vigente.
+
+El resto de correcciones de esa revisión (KEV, campos de contexto/riesgo, retiro definitivo de la 100040) sí eran verificables contra el propio repo y se aplicaron con verificación de fuente en cada caso — ver v1.2.1 en `REGLAS_TUNEADAS/CHANGELOG.md` para el detalle completo.
+
+**Actualización 2026-07-22 (tercera pasada, v1.3.0):** durante la segunda pasada aparecieron 7 archivos `.docx` sin trackear en la raíz del repositorio ("01_Propuesta_de_Negocio..." a "07_Outputs_y_Entregables..._v3.docx"). Se investigaron antes de tocar nada: su portada cita explícitamente "Repositorio base: Repositorio v1.2.0 — commit ab772d198719" — es decir, son un análisis/diseño de negocio generado por un tercero **tomando el propio commit de este trabajo como fuente**, no documentos originales de negocio del usuario o su jefe. No se fusionaron ni se usaron como reemplazo de `DOCUMENTOS/00-07` en esta pasada; quedan pendientes de una decisión explícita del usuario sobre su tratamiento. El trabajo de v1.3.0 se ejecutó siguiendo un tercer prompt de alineación técnica que NO pedía tocar esos `.docx`, centrado exclusivamente en schemas, políticas, contratos de datos y ejemplos — ver v1.3.0 en `REGLAS_TUNEADAS/CHANGELOG.md` para el detalle completo de lo corregido (eliminación de A/B/C, 5 schemas nuevos, decisión KEV formalizada con `source_detection`/`kev_enrichment`, corrección del fingerprint de `AUTH_BRUTEFORCE_SUCCESS`, `campaign_correlation`, límite documentado de `matching_user_verified` en 100013, ejemplos en `examples/client_notifications/`, y `specifications/notification_field_mapping.md`).
+
 ---
 
 ## 1. Inventario de archivos (estado antes de este trabajo)

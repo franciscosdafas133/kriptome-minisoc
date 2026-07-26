@@ -1,0 +1,89 @@
+{
+  "_comment": "Ejemplo de SALIDA: instancia que cumple specifications/client_notification.schema.json, generada a partir de AUTH_BRUTEFORCE_SUCCESS.input.json. Ilustrativo, no producido por un sistema real (no existe backend implementado en este repo). Nótese cómo datos_principales respeta matching_user_verified=false: nunca dice 'intentos contra la cuenta administrador', dice 'intentos desde la misma dirección y luego un acceso exitoso con la cuenta administrador' (ver regla crítica de comunicación en specifications/auth_evidence.schema.json).",
+  "case_id": "KRP-2026-000481",
+  "tenant_id": "CLI-001",
+  "message_type": "alerta_inicial",
+  "priority_level": "critico",
+  "template_id": "5.2",
+  "recipient_level": "primario",
+  "message_key": "KRP-2026-000481:alerta_inicial:v1",
+  "subject": "[KRP-2026-000481] CRÍTICO — Entraron a su Servidor de facturación",
+
+  "body_sections": {
+    "nivel_de_atencion": "Crítico",
+    "que_paso": "El 14 de julio a las 3:23 p. m. alguien entró a su Servidor de facturación con la cuenta administrador.",
+    "por_que_importa": "Es muy probable que la contraseña de esa cuenta esté ahora en manos de un intruso.",
+    "datos_principales": "Detectamos 10 intentos de acceso fallidos desde una misma dirección de internet, y minutos después un acceso EXITOSO desde esa misma dirección usando la cuenta administrador. El equipo afectado es su Servidor de facturación, un activo crítico para su operación.",
+    "que_debe_hacer_usted": "Cambie de inmediato la contraseña de la cuenta administrador desde otro equipo. Si esa misma contraseña se usa en otros servicios, cámbiela también ahí. Confirme si alguien de su equipo o su soporte de TI accedió legítimamente en ese horario.",
+    "que_no_debe_hacer": "No apague el servidor: se pierde el rastro de lo que hizo el intruso después de entrar.",
+    "que_esta_haciendo_kriptome": "Estamos revisando qué hizo esa cuenta después de entrar. Con su autorización, podemos bloquear la dirección de origen.",
+    "instrucciones_de_respuesta": "Responda este mismo correo (sin cambiar el asunto) indicando: si reconoce esta actividad, quién la realizó y por qué, qué acciones ya tomó usted, y si notó algo más fuera de lo normal en ese equipo.",
+    "detalle_soporte_tecnico": "Regla Kriptome 100013 (login Windows exitoso tras brute force, correlación nativa 60204 por IP) · dirección de origen 198.51.100.23 · cuenta administrador · equipo AST-004 (srv-facturacion-01.cli001.local) · MITRE T1110/T1078 · caso KRP-2026-000481. Nota de evidencia: la correlación de los 10 intentos fallidos fue por misma IP (regla nativa 60204), no verificada evento-por-evento contra la cuenta administrador (matching_user_verified=false en auth_evidence) -- de ahí la redacción que separa el conteo de fallos (por IP) del acceso exitoso (por cuenta)."
+  },
+
+  "incident_facts": {
+    "asset_alias": "Servidor de facturación",
+    "hostname": "srv-facturacion-01.cli001.local",
+    "environment": "prod",
+    "business_service": "Facturación electrónica",
+    "criticality": "critical",
+    "target_user": "administrador",
+    "source_ip": "198.51.100.23",
+    "access_type": "acceso por red",
+    "workstation_name": "ATTACKER-PC",
+    "first_seen_at": "2026-07-14T15:10:15-05:00",
+    "last_seen_at": "2026-07-14T15:23:40-05:00",
+    "successful_login_at": "2026-07-14T15:23:40-05:00",
+    "failed_attempt_count": 10,
+    "successful_login_count": 1,
+    "geo_country": null,
+    "geo_city": null,
+    "isp_or_asn": null,
+    "reputation_verdict": null,
+    "source_seen_before": null,
+    "authorized_source_match": null
+  },
+
+  "risk_explanation": {
+    "risk_score": null,
+    "priority_level": "critico",
+    "risk_factors": [
+      "login exitoso confirmado tras 10 intentos fallidos desde el mismo origen (regla 100013)",
+      "el activo es crítico para el negocio (Servidor de facturación, expuesto a internet)",
+      "la cuenta afectada (administrador) tiene privilegios administrativos"
+    ],
+    "risk_policy_version": "AUTH_BRUTEFORCE_SUCCESS@DISEÑADO",
+    "calculated_at": "2026-07-14T15:23:45-05:00"
+  },
+
+  "action_plan": {
+    "procedure_id": "PROC-AUTH-001",
+    "procedure_version": "1",
+    "customer_actions": [
+      "Cambiar la contraseña de la cuenta administrador desde otro equipo",
+      "Si la misma contraseña se usa en otros servicios, cambiarla también ahí",
+      "Confirmar si alguien de su equipo o su soporte de TI accedió legítimamente en ese horario"
+    ],
+    "do_not_do": ["No apague el servidor: se pierde la evidencia de lo que hizo el intruso"],
+    "evidence_to_preserve": ["no reiniciar el servidor", "no cerrar la sesión activa hasta revisarla"],
+    "recommended_deadline": null,
+    "escalation_contact": "soporte@kriptome.pe · (01) 6XX XXXX"
+  },
+
+  "technical_appendix": {
+    "rule_ids": ["100013", "60204", "60106"],
+    "event_ids": ["evt-2026-0714-000481"],
+    "raw_event_references": ["indexer://alerts/2026.07.14/evt-2026-0714-000481"],
+    "mitre_ids": ["T1110", "T1078"],
+    "source_ip": "198.51.100.23",
+    "target_user": "administrador",
+    "logon_type": "3",
+    "workstation_name": "ATTACKER-PC",
+    "provider_references": []
+  },
+
+  "language": "es-PE",
+  "sent_at": null,
+  "delivery_status": "draft",
+  "out_of_band_confirmation_required": true
+}

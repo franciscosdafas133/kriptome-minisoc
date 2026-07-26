@@ -1,0 +1,59 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://kriptome.internal/specifications/asset_context.schema.json",
+  "title": "AssetContext",
+  "description": "Contexto de negocio de un activo (equipo/servicio). Es la fuente de asset_alias y demás datos que se muestran al cliente en client_notification.schema.json. Ninguno de estos campos es nativo de Wazuh -- provienen de los labels del agente (ver REGLAS_TUNEADAS/agent-conf/) y/o de una CMDB que este repo no implementa.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["tenant_id", "asset_id", "asset_alias"],
+  "properties": {
+    "tenant_id": { "type": "string" },
+    "asset_id": { "type": "string", "description": "Identificador técnico (p. ej. 'AST-004'). NUNCA se muestra solo al cliente -- ver asset_alias." },
+    "asset_alias": {
+      "type": "string",
+      "description": "Nombre de negocio del equipo, el único identificador que debe llegar al cliente. Ejemplo: 'Servidor de facturación'. Nunca mostrar únicamente 'AST-004' en una comunicación al cliente."
+    },
+    "hostname": {
+      "type": ["string", "null"],
+      "description": "Nombre técnico real del equipo (win.system.computer / hostname de syslog). Uso interno / technical_appendix únicamente."
+    },
+    "environment": {
+      "type": ["string", "null"],
+      "enum": ["prod", "staging", "dev", null]
+    },
+    "criticality": {
+      "type": ["string", "null"],
+      "enum": ["low", "medium", "high", "critical", null]
+    },
+    "business_service": {
+      "type": ["string", "null"],
+      "description": "Servicio de negocio que depende de este activo (p. ej. 'Facturación electrónica'). Requiere registro manual en onboarding -- no existe hoy una fuente automática."
+    },
+    "internet_exposed": {
+      "type": ["boolean", "null"],
+      "description": "Si el activo tiene algún servicio expuesto directamente a internet (p. ej. RDP/VPN público). Afecta el cálculo de risk_result (ver asset_exposure en risk_result.schema.json). Null si no se ha registrado en el onboarding."
+    },
+    "owner_name": {
+      "type": ["string", "null"],
+      "description": "Persona responsable del activo dentro del cliente (no el contacto de Kriptome)."
+    },
+    "owner_contact": {
+      "type": ["string", "null"],
+      "description": "Correo/teléfono del responsable del activo. Dato sensible -- no se envía en el cuerpo de una notificación al mismo cliente (ya lo conoce), se usa para enrutar internamente."
+    },
+    "operating_system": {
+      "type": ["string", "null"],
+      "description": "Sistema operativo del activo (informativo, para decidir routing entre familias SSH/Windows en el diseño, no un campo que Wazuh entregue directamente en cada evento)."
+    },
+    "asset_status": {
+      "type": ["string", "null"],
+      "enum": ["active", "decommissioned", "unknown", null],
+      "description": "Si el activo sigue en operación. Un evento sobre un asset 'decommissioned' es una señal de inconsistencia a revisar (podría indicar que el agente no se retiró correctamente), no se descarta automáticamente."
+    },
+    "context_updated_at": {
+      "type": ["string", "null"],
+      "format": "date-time",
+      "description": "Cuándo se actualizó por última vez este contexto -- permite detectar datos de CMDB desactualizados."
+    }
+  }
+}

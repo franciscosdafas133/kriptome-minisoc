@@ -1,0 +1,55 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://kriptome.internal/specifications/case_summary.schema.json",
+  "title": "CaseSummary",
+  "description": "Resumen agregado de un caso -- distinto de case.schema.json (que es el objeto de estado completo del caso). CaseSummary es la vista de solo-lectura pensada para alimentar notificaciones, digests e informes, con los contadores ya agregados. REGLA IMPORTANTE: event_count (de case.schema.json) NO debe usarse automáticamente como failed_attempt_count -- un caso puede contener eventos de tipos distintos (p. ej. intentos fallidos + un login exitoso + un cambio de grupo), y failed_attempt_count debe contar únicamente los eventos de tipo fallo de autenticación.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["case_id", "tenant_id", "asset_id", "case_type", "event_count"],
+  "properties": {
+    "case_id": { "type": "string", "pattern": "^KRP-[0-9]{4}-[0-9]{6}$" },
+    "tenant_id": { "type": "string" },
+    "asset_id": { "type": "string" },
+    "case_type": { "type": "string" },
+    "first_seen_at": { "type": ["string", "null"], "format": "date-time" },
+    "last_seen_at": { "type": ["string", "null"], "format": "date-time" },
+    "event_count": {
+      "type": "integer",
+      "minimum": 1,
+      "description": "Total de eventos agrupados en el caso, de CUALQUIER tipo (ver case.schema.json). No confundir con failed_attempt_count."
+    },
+    "failed_attempt_count": {
+      "type": ["integer", "null"],
+      "minimum": 0,
+      "description": "Conteo de eventos específicamente de tipo intento fallido de autenticación dentro de este caso. Puede ser MENOR que event_count si el caso incluye otros tipos de evento (p. ej. el login exitoso final, o eventos de cambio material). Null si el case_type no es de autenticación."
+    },
+    "successful_login_count": {
+      "type": ["integer", "null"],
+      "minimum": 0,
+      "description": "Conteo de eventos de login exitoso dentro del caso. Independiente de failed_attempt_count -- ambos se suman, no se derivan el uno del otro."
+    },
+    "affected_user_count": {
+      "type": ["integer", "null"],
+      "minimum": 0,
+      "description": "Cuántas cuentas distintas aparecen como target_user en los eventos del caso (relevante para distinguir un ataque a una cuenta vs. varias)."
+    },
+    "affected_asset_count": {
+      "type": ["integer", "null"],
+      "minimum": 1,
+      "description": "Normalmente 1 (el fingerprint incluye asset_id), pero se deja como campo explícito para los casos que la App decida agregar a nivel de campaña (ver campaign_correlation en policies/case_types/AUTH_BRUTEFORCE_SUCCESS.yaml)."
+    },
+    "evidence_summary": {
+      "type": ["string", "null"],
+      "description": "Resumen en una frase de la evidencia agregada, para uso interno (operador) -- no es el texto que se envía al cliente (ver client_notification.schema.json para eso)."
+    },
+    "material_change_detected": {
+      "type": "boolean",
+      "default": false,
+      "description": "Si el caso tuvo al menos un cambio material desde su apertura (ver policies/case_types/*.yaml campo material_changes para qué cuenta como tal por case_type)."
+    },
+    "material_change_type": {
+      "type": ["string", "null"],
+      "description": "Cuál de los material_changes definidos en la política del case_type ocurrió (texto libre que debe coincidir con una entrada de esa lista, no un valor inventado). Null si material_change_detected=false."
+    }
+  }
+}

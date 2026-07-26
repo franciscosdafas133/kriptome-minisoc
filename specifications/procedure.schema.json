@@ -1,0 +1,64 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://kriptome.internal/specifications/procedure.schema.json",
+  "title": "Procedure",
+  "description": "Procedimiento autorizado para un case_type. Es la fuente de verdad de las acciones que se comunican al cliente (ver action_plan en client_notification.schema.json): la IA puede mejorar la redacción de estas acciones, pero NUNCA puede inventar una acción que no esté en un Procedure aprobado (approved_by/approved_at/status). Un caso sin procedimiento autorizado va a cola humana, no se comunica con acciones improvisadas (ver DOCUMENTOS/04_MANUAL_DE_USUARIO.docx §A.3).",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["procedure_id", "procedure_version", "case_type", "customer_actions", "do_not_do", "human_review_required", "status"],
+  "properties": {
+    "procedure_id": { "type": "string" },
+    "procedure_version": { "type": "string" },
+    "case_type": {
+      "type": "string",
+      "description": "Debe existir en policies/case_types/*.yaml. Un procedure sin case_type asociado no es válido."
+    },
+    "priority_levels": {
+      "type": "array",
+      "items": { "type": "string", "enum": ["informativo", "atencion", "urgente", "critico"] },
+      "description": "A qué niveles de prioridad aplica este procedimiento (un mismo case_type puede tener procedimientos distintos según prioridad)."
+    },
+    "customer_actions": {
+      "type": "array",
+      "items": { "type": "string" },
+      "description": "Catálogo autorizado de acciones que se le pueden pedir al cliente para este procedimiento. client_notification.action_plan.customer_actions debe ser un subconjunto de esta lista."
+    },
+    "internal_actions": {
+      "type": "array",
+      "items": { "type": "string" },
+      "description": "Acciones que ejecuta el operador/analista de Kriptome (no el cliente) -- p. ej. 'bloquear IP en el firewall gestionado', 'aislar el equipo'. Sujetas a out_of_band_confirmation_required en client_notification.schema.json cuando son sensibles."
+    },
+    "do_not_do": {
+      "type": "array",
+      "items": { "type": "string" }
+    },
+    "evidence_to_preserve": {
+      "type": "array",
+      "items": { "type": "string" }
+    },
+    "recommended_deadline": {
+      "type": ["string", "null"],
+      "format": "duration",
+      "description": "Duración ISO 8601 recomendada por defecto para este procedimiento (puede ajustarse por caso, ver client_notification.action_plan.recommended_deadline)."
+    },
+    "human_review_required": {
+      "type": "boolean",
+      "description": "Si este procedimiento SIEMPRE requiere revisión humana antes de comunicarse (independiente de si el case_type en general la requiere)."
+    },
+    "out_of_band_confirmation_required": {
+      "type": "boolean",
+      "default": false,
+      "description": "Si las internal_actions de este procedimiento son lo suficientemente sensibles (bloquear/aislar/apagar) como para requerir confirmación telefónica del cliente antes de ejecutarse."
+    },
+    "approved_by": {
+      "type": ["string", "null"],
+      "description": "Quién aprobó este procedimiento como válido para producción. Null mientras status != 'approved'."
+    },
+    "approved_at": { "type": ["string", "null"], "format": "date-time" },
+    "status": {
+      "type": "string",
+      "enum": ["draft", "approved", "deprecated"],
+      "description": "'draft' = no debe usarse todavía para comunicar al cliente. 'approved' = válido para producción. 'deprecated' = ya no se usa, se conserva por trazabilidad histórica de casos antiguos."
+    }
+  }
+}

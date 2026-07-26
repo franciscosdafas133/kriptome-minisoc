@@ -1,0 +1,73 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://kriptome.internal/specifications/risk_result.schema.json",
+  "title": "RiskResult",
+  "description": "Resultado de la evaluación de riesgo de un caso. CONTRATO DE DATOS, NO IMPLEMENTADO: no existe hoy un motor/clasificador de riesgo construido en este repo. La prioridad de un caso NO debe copiarse directamente desde rule_level de Wazuh -- rule_level es la severidad que Wazuh asigna a UN evento; priority_level es una decisión de negocio que combina varios factores (ver risk_factors) y puede diferir del rule_level de la regla que originó el caso.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["case_id", "priority_level", "risk_factors", "risk_policy_version", "calculated_at"],
+  "properties": {
+    "case_id": { "type": "string", "pattern": "^KRP-[0-9]{4}-[0-9]{6}$" },
+    "risk_score": {
+      "type": ["number", "null"],
+      "minimum": 0,
+      "maximum": 100,
+      "description": "Score compuesto. Null hasta que exista un modelo real implementado -- no rellenar con un valor arbitrario solo para tener un número."
+    },
+    "priority_level": {
+      "type": "string",
+      "enum": ["informativo", "atencion", "urgente", "critico"],
+      "description": "Prioridad de negocio final. Se deriva de risk_factors combinados según la política de la case_type (ver policies/case_types/*.yaml routing), NO es una copia de rule_level."
+    },
+    "risk_factors": {
+      "type": "array",
+      "description": "Cada factor que contribuyó al score/prioridad, con su peso y explicación -- para que la prioridad sea auditable, no una caja negra.",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["factor", "value", "explanation"],
+        "properties": {
+          "factor": {
+            "type": "string",
+            "enum": [
+              "successful_login_after_failures",
+              "privileged_account",
+              "asset_criticality",
+              "asset_exposure",
+              "source_reputation",
+              "source_not_authorized",
+              "source_not_seen_before",
+              "attempt_count",
+              "known_exploitation"
+            ],
+            "description": "Catálogo cerrado de factores considerados. Un factor fuera de esta lista debe agregarse aquí explícitamente antes de usarse -- no se acepta texto libre para 'factor' (a diferencia de 'explanation')."
+          },
+          "value": {
+            "description": "El valor concreto observado para este factor (tipo depende del factor: booleano para privileged_account, string para asset_criticality, número para attempt_count, etc.). Tipo libre porque cada factor tiene una naturaleza distinta.",
+            "type": ["string", "number", "boolean", "null"]
+          },
+          "weight": {
+            "type": ["number", "null"],
+            "minimum": 0,
+            "maximum": 1,
+            "description": "Peso relativo de este factor en el cálculo del score, si el modelo lo usa. Null si el modelo de riesgo aún no está implementado (ver descripción del schema)."
+          },
+          "explanation": {
+            "type": "string",
+            "description": "Texto trazable a datos reales del caso (p. ej. 'la cuenta administrador tiene privilegios de dominio', 'el activo está marcado criticality=critical'). Nunca un texto genérico sin dato concreto detrás."
+          }
+        }
+      }
+    },
+    "risk_policy_version": {
+      "type": "string",
+      "description": "Versión de la política de riesgo/case_type aplicada al momento del cálculo (para poder auditar por qué se decidió así, incluso si la política cambia después)."
+    },
+    "calculated_at": { "type": "string", "format": "date-time" },
+    "input_references": {
+      "type": "array",
+      "items": { "type": "string" },
+      "description": "Punteros a los objetos de entrada usados (case_summary, auth_evidence, asset_context, enrichment_result) para poder reconstruir el cálculo -- no se embebe el contenido completo aquí."
+    }
+  }
+}

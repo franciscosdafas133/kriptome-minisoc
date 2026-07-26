@@ -76,6 +76,71 @@
       "items": { "type": "string" },
       "description": "IDs MITRE ATT&CK ya presentes en la regla que disparó (bloque <mitre><id> del XML)."
     },
+
+    "asset_alias": {
+      "type": ["string", "null"],
+      "description": "Label agent.labels.asset_alias -- nombre de negocio del equipo (p. ej. 'Servidor de facturación'). Es el único identificador que debe llegar al cliente (ver specifications/client_notification.schema.json). Null si el agente aún no tiene ese label configurado."
+    },
+    "hostname": {
+      "type": ["string", "null"],
+      "description": "win.system.computer / nombre real del host que reporta. Dato técnico interno -- nunca se envía al cliente en el cuerpo principal del correo (solo en 'detalle_soporte_tecnico')."
+    },
+    "environment": {
+      "type": ["string", "null"],
+      "enum": ["prod", "staging", "dev", null],
+      "description": "Label agent.labels.environment (ver REGLAS_TUNEADAS/agent-conf/CLI-001_agent.conf.example)."
+    },
+    "criticality": {
+      "type": ["string", "null"],
+      "enum": ["low", "medium", "high", "critical", null],
+      "description": "Label agent.labels.criticality del activo. Determina el routing (ver policies/case_types/*.yaml)."
+    },
+    "business_service": {
+      "type": ["string", "null"],
+      "description": "Servicio de negocio que depende de este activo. No existe hoy como campo nativo de Wazuh -- requiere que el onboarding lo registre en la CMDB (ver DOCUMENTOS/03_FLUJOS_OPERATIVOS.docx §5)."
+    },
+
+    "first_seen_at": {
+      "type": ["string", "null"],
+      "format": "date-time",
+      "description": "Primer evento del patrón correlacionado (p. ej. el primer intento de una racha de fuerza bruta). Distinto de 'timestamp', que es de ESTE evento puntual."
+    },
+    "last_seen_at": {
+      "type": ["string", "null"],
+      "format": "date-time",
+      "description": "Evento más reciente del mismo patrón correlacionado."
+    },
+    "failed_attempt_count": {
+      "type": ["integer", "null"],
+      "minimum": 0,
+      "description": "Para correlaciones de fuerza bruta (frequency/timeframe de reglas como 5763, 60204, 100010, 100011): cuántos intentos fallidos lleva contados la regla al momento de este evento."
+    },
+    "successful_login_count": {
+      "type": ["integer", "null"],
+      "minimum": 0,
+      "description": "Accesos exitosos detectados dentro de la ventana de correlación (relevante para 100012/100013: éxito tras fuerza bruta)."
+    },
+    "logon_type": {
+      "type": ["string", "null"],
+      "description": "win.eventdata.logonType (p. ej. '3'=red, '10'=RDP). Verificado en rules/0580-win-security_rules.xml. Null fuera de eventos de logon de Windows."
+    },
+    "workstation_name": {
+      "type": ["string", "null"],
+      "description": "win.eventdata.workstationName -- estación de origen del intento de logon, cuando el decoder la expone."
+    },
+
+    "risk_score": {
+      "type": ["number", "null"],
+      "minimum": 0,
+      "maximum": 100,
+      "description": "Score de riesgo compuesto. CONTRATO DE DATOS, NO IMPLEMENTADO: no existe hoy un modelo/clasificador construido en este repo que calcule este valor -- debe quedar null hasta que exista, nunca rellenarse con un número inventado."
+    },
+    "risk_factors": {
+      "type": "array",
+      "items": { "type": "string" },
+      "description": "Motivos concretos y trazables a datos reales del evento (p. ej. 'criticality=critical', 'cve en catálogo CISA KEV', 'segundo intento en 24h'). Vacío si no hay factores calculados todavía."
+    },
+
     "raw_event_reference": {
       "type": "string",
       "description": "Puntero al evento original en el Indexer (no el log completo embebido aquí) -- para que el operador o la App puedan recuperar el detalle completo sin que este objeto normalizado cargue el payload entero."
@@ -84,9 +149,9 @@
       "type": "array",
       "items": {
         "type": "string",
-        "enum": ["geoip", "ip_reputation", "hash_reputation", "domain_reputation", "cve_description_es", "office365_recordtype_translation"]
+        "enum": ["geoip", "ip_reputation", "hash_reputation", "domain_reputation", "cve_description_es", "office365_recordtype_translation", "cisa_kev"]
       },
-      "description": "Lista de enriquecimientos externos que este evento requiere y AÚN no se resolvieron (ver columna 'EnriquecimientoExternoNecesario' del diccionario). Ninguno de estos es nativo de Wazuh."
+      "description": "Lista de enriquecimientos externos que este evento requiere y AÚN no se resolvieron (ver columna 'EnriquecimientoExternoNecesario' del diccionario). Ninguno de estos es nativo de Wazuh. 'cisa_kev' se agrega SOLO cuando 'cve' no es null -- ver specifications/enrichment_result.schema.json y policies/case_types/VULNERABILITY_KEV.yaml para la regla completa (la consulta KEV se hace únicamente con un CVE válido entregado por Wazuh, nunca de forma especulativa)."
     }
   }
 }
