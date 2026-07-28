@@ -1,8 +1,9 @@
 {
-  "_comment": "Ejemplo de ENTRADA: evento normalizado + evidencia + contexto que alimentan la generación de una notificación. No es un evento real capturado -- es un ejemplo ilustrativo diseñado a mano para validar los schemas de este repo, marcado explícitamente como tal.",
   "normalized_event": {
     "event_id": "evt-2026-0714-000481",
+    "normalization_version": "v1",
     "tenant_id": "CLI-001",
+    "agent_id": "004",
     "asset_id": "AST-004",
     "timestamp": "2026-07-14T15:23:40-05:00",
     "source": "wazuh_eventchannel",
@@ -13,18 +14,8 @@
     "source_ip": "198.51.100.23",
     "target_user": "administrador",
     "mitre_ids": ["T1110", "T1078"],
-    "asset_alias": "Servidor de facturación",
-    "environment": "prod",
-    "criticality": "critical",
-    "business_service": "Facturación electrónica",
-    "first_seen_at": "2026-07-14T15:10:15-05:00",
-    "last_seen_at": "2026-07-14T15:23:40-05:00",
-    "failed_attempt_count": 10,
-    "successful_login_count": 1,
     "logon_type": "3",
     "workstation_name": "ATTACKER-PC",
-    "risk_score": null,
-    "risk_factors": [],
     "raw_event_reference": "indexer://alerts/2026.07.14/evt-2026-0714-000481",
     "enrichment_pending": ["geoip", "ip_reputation"]
   },
@@ -43,15 +34,15 @@
     "logon_type_label": "acceso por red",
     "workstation_name": "ATTACKER-PC",
     "matching_user_verified": false,
-    "correlation_basis": "same_source_ip",
-    "_comment_matching_user_verified": "false porque la correlación que produjo failed_attempt_count=10 fue la regla nativa 60204 (same_field win.eventdata.ipAddress), NO una comparación de targetUserName evento por evento. Ver REGLAS_TUNEADAS/wazuh/rules/kriptome_local_rules.xml (nota en 100013) y policies/case_types/AUTH_BRUTEFORCE_SUCCESS.yaml. Esto es intencional en este ejemplo: es el caso MÁS COMÚN (100013 vía IP), no el caso ideal."
+    "correlation_basis": "same_source_ip"
   },
   "asset_context": {
     "tenant_id": "CLI-001",
     "asset_id": "AST-004",
     "asset_alias": "Servidor de facturación",
     "hostname": "srv-facturacion-01.cli001.local",
-    "environment": "prod",
+    "environment_type": "production",
+    "site_type": "office",
     "criticality": "critical",
     "business_service": "Facturación electrónica",
     "internet_exposed": true,
@@ -78,21 +69,31 @@
   "procedure": {
     "procedure_id": "PROC-AUTH-001",
     "procedure_version": "1",
+    "title": "Login exitoso tras fuerza bruta -- respuesta autorizada",
+    "owner": "Kriptome SOC Lead",
     "case_type": "AUTH_BRUTEFORCE_SUCCESS",
     "priority_levels": ["critico"],
     "customer_actions": [
-      "Cambiar la contraseña de la cuenta administrador desde otro equipo",
+      "Cambiar la contraseña de la cuenta afectada desde otro equipo",
       "Si la misma contraseña se usa en otros servicios, cambiarla también ahí",
-      "Confirmar si alguien de su equipo o su soporte de TI accedió legítimamente en ese horario"
+      "Confirmar si alguien de su equipo o su soporte de TI accedió legítimamente en ese horario",
+      "Revisar los accesos posteriores de la cuenta afectada junto con su soporte de TI"
     ],
-    "internal_actions": ["revisar sesión iniciada por la cuenta administrador tras el acceso", "proponer bloqueo del source_ip con autorización del cliente"],
-    "do_not_do": ["No apague el servidor: se pierde la evidencia de lo que hizo el acceso"],
-    "evidence_to_preserve": ["no reiniciar el servidor", "no cerrar la sesión activa hasta revisarla"],
+    "internal_actions": ["escalar el caso a un operador humano de inmediato", "evaluar con el cliente si es viable aislar el equipo, según su capacidad técnica real"],
+    "do_not_do": [],
+    "decision_points": {
+      "active_session_detected": {
+        "description": "¿Se detectó una sesión activa iniciada por la cuenta comprometida al momento de generar la comunicación?",
+        "true": ["escalar inmediatamente a un operador humano", "evaluar con el cliente el aislamiento del equipo afectado, según su capacidad técnica", "cerrar o invalidar la sesión activa según la capacidad del cliente"],
+        "false": ["cambiar credenciales de la cuenta afectada", "revisar accesos posteriores de esa cuenta en los días siguientes"]
+      }
+    },
+    "evidence_to_preserve": ["no reiniciar el equipo hasta que el soporte técnico del cliente confirme haber revisado la sesión (solo si se detectó sesión activa)"],
     "recommended_deadline": null,
     "human_review_required": true,
     "out_of_band_confirmation_required": true,
-    "approved_by": "EJEMPLO-NO-REAL",
-    "approved_at": "2026-01-01T00:00:00-05:00",
-    "status": "approved"
+    "approved_by": null,
+    "approved_at": null,
+    "status": "draft"
   }
 }

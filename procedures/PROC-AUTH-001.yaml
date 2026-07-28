@@ -1,0 +1,55 @@
+# PROC-AUTH-001
+# Procedimiento para AUTH_BRUTEFORCE_SUCCESS (login exitoso tras fuerza bruta).
+# ESTADO: draft -- NO puede usarse para comunicar al cliente hasta que un
+# humano lo apruebe (ver procedures/README.md).
+
+procedure_id: PROC-AUTH-001
+procedure_version: "1"
+title: "Login exitoso tras fuerza bruta -- respuesta autorizada"
+owner: "Kriptome SOC Lead"
+case_type: AUTH_BRUTEFORCE_SUCCESS
+priority_levels:
+  - critico
+
+customer_actions:
+  - "Cambiar la contraseña de la cuenta afectada desde otro equipo"
+  - "Si la misma contraseña se usa en otros servicios, cambiarla también ahí"
+  - "Confirmar si alguien de su equipo o su soporte de TI accedió legítimamente en ese horario"
+  - "Revisar los accesos posteriores de la cuenta afectada junto con su soporte de TI"
+
+internal_actions:
+  - "escalar el caso a un operador humano de inmediato (human_review_required=true)"
+  - "evaluar con el cliente si es viable aislar el equipo, según su capacidad técnica real"
+  - "proponer bloqueo del source_ip en el firewall gestionado, solo con autorización explícita del cliente"
+
+do_not_do: []
+# Vacío intencionalmente: las prohibiciones de este procedimiento son
+# CONDICIONALES (dependen de si hay una sesión activa detectada o no), no
+# universales -- ver decision_points.
+
+decision_points:
+  active_session_detected:
+    description: >-
+      ¿Se detectó una sesión activa iniciada por la cuenta comprometida al
+      momento de generar la comunicación? Esta condición determina si es
+      seguro pedir un cambio de contraseña sin más, o si primero hace falta
+      cortar el acceso en curso.
+    "true":
+      - "escalar inmediatamente a un operador humano (no esperar la revisión programada)"
+      - "evaluar con el cliente el aislamiento del equipo afectado, según su capacidad técnica"
+      - "cerrar o invalidar la sesión activa según la capacidad del cliente (no asumir que Kriptome puede hacerlo directamente -- ver limitaciones de implementación)"
+    "false":
+      - "cambiar credenciales de la cuenta afectada"
+      - "revisar accesos posteriores de esa cuenta en los días siguientes"
+
+evidence_to_preserve:
+  - "no reiniciar el equipo hasta que el soporte técnico del cliente confirme haber revisado la sesión (solo si active_session_detected=true)"
+  - "conservar los registros de acceso del equipo afectado"
+
+recommended_deadline: null
+human_review_required: true
+out_of_band_confirmation_required: true
+
+approved_by: null
+approved_at: null
+status: draft

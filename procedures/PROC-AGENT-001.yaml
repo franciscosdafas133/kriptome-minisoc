@@ -1,0 +1,43 @@
+# PROC-AGENT-001
+# Procedimiento para AGENT_HEALTH (un sensor deja de reportar).
+# ESTADO: draft -- NO puede usarse para comunicar al cliente hasta que un
+# humano lo apruebe (ver procedures/README.md).
+
+procedure_id: PROC-AGENT-001
+procedure_version: "1"
+title: "Sensor deja de reportar -- respuesta autorizada"
+owner: "Kriptome SOC Lead"
+case_type: AGENT_HEALTH
+priority_levels:
+  - informativo
+  - atencion
+  - urgente
+
+customer_actions:
+  - "Confirmar si el equipo fue apagado intencionalmente o está fuera de línea por mantenimiento"
+  - "Si el equipo debería estar encendido y conectado, coordinar con su soporte de TI una revisión"
+
+internal_actions:
+  - "monitorear el tiempo transcurrido desde la desconexión (ver umbral de keepalive en policies/case_types/AGENT_HEALTH.yaml)"
+  - "escalar si el equipo es de criticidad alta/crítica y no reconecta dentro del umbral"
+
+do_not_do: []
+
+decision_points:
+  asset_criticality_high_or_critical:
+    description: "¿El activo desconectado tiene criticidad alta o crítica?"
+    "true":
+      - "escalar a revisión humana si no reconecta dentro del umbral de keepalive"
+      - "notificar al cliente con prioridad urgente"
+    "false":
+      - "incluir en el resumen diario/semanal, sin notificación inmediata salvo que persista varios días"
+
+evidence_to_preserve: []
+
+recommended_deadline: null
+human_review_required: false
+out_of_band_confirmation_required: false
+
+approved_by: null
+approved_at: null
+status: draft

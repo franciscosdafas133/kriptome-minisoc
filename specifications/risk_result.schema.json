@@ -38,9 +38,15 @@
               "source_not_authorized",
               "source_not_seen_before",
               "attempt_count",
-              "known_exploitation"
+              "known_exploitation",
+              "technical_severity",
+              "evidence_strength",
+              "successful_access",
+              "scope",
+              "historical_context",
+              "business_impact"
             ],
-            "description": "Catálogo cerrado de factores considerados. Un factor fuera de esta lista debe agregarse aquí explícitamente antes de usarse -- no se acepta texto libre para 'factor' (a diferencia de 'explanation')."
+            "description": "Catálogo cerrado de factores considerados. Un factor fuera de esta lista debe agregarse aquí explícitamente antes de usarse -- no se acepta texto libre para 'factor' (a diferencia de 'explanation'). NOTA v1.3.1 (Fase 18, ver policies/risk/risk_policy_v1.yaml): 'asset_criticality' y 'known_exploitation' ya cubrían dos de los ocho factores nombrados en el diseño de política de riesgo del prompt de arquitectura; 'asset_exposure' es el mismo concepto que 'exposure'; los seis restantes (technical_severity, evidence_strength, successful_access, scope, historical_context, business_impact) se agregan aquí sin renombrar los cuatro ya existentes, para no invalidar risk_factors ya calculados con los nombres previos."
           },
           "value": {
             "description": "El valor concreto observado para este factor (tipo depende del factor: booleano para privileged_account, string para asset_criticality, número para attempt_count, etc.). Tipo libre porque cada factor tiene una naturaleza distinta.",

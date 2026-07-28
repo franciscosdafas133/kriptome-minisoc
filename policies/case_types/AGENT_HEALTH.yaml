@@ -2,6 +2,15 @@
 # Un sensor deja de reportar. Familia 14 (Salud del sensor), añadida en la
 # revision end-to-end (ver REGLAS_TUNEADAS/routing/routing_matrix.csv).
 # Cubre tanto la apertura (AGENT_DOWN) como el cierre automatico (503).
+#
+# CORRECCION v1.3.1 (Fase 13): "varios agentes del mismo tenant caen dentro
+# de la misma ventana" estaba listado como material_change de ESTE caso
+# individual -- mismo error ya corregido en AUTH_BRUTEFORCE_SUCCESS/
+# MALWARE_CONFIRMED: un caso AGENT_HEALTH es por UN asset_id (fingerprint
+# fijo), la caida de OTROS agentes es un fingerprint distinto = casos
+# distintos. La relacion entre ellos (posible corte de red/energia) se
+# modela via campaign_correlation (correlation_type=multi_agent_outage),
+# nunca como material_change de un caso individual.
 
 case_type: AGENT_HEALTH
 
@@ -9,11 +18,11 @@ source_rules:
   - rule_id: "503"
     wazuh_family: "Salud sensor"
     validation_status: VALIDADO-XML
-    note: "Agent started -- CIERRA el caso AGENT_DOWN si estaba abierto (decoders/0200-ossec_decoders.xml)"
+    note: "Agent started -- CIERRA el caso AGENT_HEALTH si estaba abierto (decoders/0200-ossec_decoders.xml)"
   - rule_id: "504"
     wazuh_family: "Salud sensor"
     validation_status: VALIDADO-XML
-    note: "Agent disconnected -- ABRE el caso"
+    note: "Agent disconnected -- ABRE el caso, sujeto a debounce_window (ver abajo)"
   - rule_id: "505"
     wazuh_family: "Salud sensor"
     validation_status: VALIDADO-XML
@@ -31,34 +40,95 @@ fingerprint_fields:
   # adicional (srcip, cve, etc.) -- el fingerprint es por asset, porque lo
   # que se correlaciona es "este equipo especifico dejo de reportar".
 
-dedupe_window: PT15M
-# Ver REGLAS_TUNEADAS/routing/routing_matrix.csv fila 504: "App vigila
-# ademas keepalive >15min" -- este valor viene de ahi, no es arbitrario.
+# Timing (Fase 13 -- añadido en v1.3.1, antes solo existia dedupe_window):
+debounce_window: PT2M
+# Tiempo de espera tras un evento 504/506 antes de considerar la
+# desconexion "real" y abrir el caso -- evita abrir un caso por una
+# reconexion de red de 30 segundos. Si llega un 503 (reconexion) dentro de
+# esta ventana, NO se abre caso.
+
+stability_window: PT15M
+# Umbral de keepalive (ver REGLAS_TUNEADAS/routing/routing_matrix.csv fila
+# 504: "App vigila ademas keepalive >15min") -- tras este tiempo sin
+# reconexion, el caso escala de temporary_disconnect a persistent_disconnect
+# (ver disconnect_classification abajo).
+
+flap_count_threshold: 3
+flap_window: PT30M
+# Si el mismo asset_id genera 3 o mas ciclos de disconnect/reconnect dentro
+# de 30 minutos, se clasifica como "flapping" (conexion inestable) en vez
+# de generar un caso nuevo por cada ciclo -- ver disconnect_classification.
+
+cooldown_after_flap: PT60M
+# Tras detectar flapping, se suprime la apertura de nuevos casos
+# individuales por otros 60 minutos (se sigue registrando el evento, pero
+# NO se notifica al cliente por cada reconexion/desconexion adicional
+# dentro del cooldown) -- evita saturar al cliente con mensajes por cada
+# reconexion de una conexion inestable real.
+
+dedupe_window: PT15M   # alias de stability_window para compatibilidad con el resto de policies (mismo valor)
 
 auto_close_after: null
 # No se auto-cierra por tiempo -- se cierra por el EVENTO 503 (reconexion),
-# ver reopen_policy. Es el unico case_type de estas 5 politicas donde el
+# ver reopen_policy. Es el unico case_type de estas policies donde el
 # cierre es otro evento de Wazuh, no un timeout ni una respuesta del cliente.
 
 reopen_policy:
   reopens_if: "no aplica -- este case_type se ABRE con 504/506 y se CIERRA con 503, nunca se reabre un caso ya cerrado por 503; una nueva desconexion abre un caso NUEVO"
   action: "N/A"
 
+# Clasificacion del tipo de desconexion (Fase 13) -- determina el routing,
+# no es un material_change de un caso ya abierto sino el estado inicial
+# calculado al abrirlo.
+disconnect_classification:
+  - value: temporary_disconnect
+    description: "desconectado menos de stability_window (15 min); no escala prioridad todavia"
+  - value: persistent_disconnect
+    description: "desconectado mas de stability_window; escala segun asset_context.criticality"
+  - value: planned_maintenance
+    description: "la desconexion coincide con una maintenance_window_match=true del asset (ver abajo) -- NO genera notificacion al cliente"
+  - value: agent_removed
+    description: "evento 505 -- requiere confirmar con el cliente si fue intencional, no se asume automaticamente"
+  - value: multi_asset_outage
+    description: "coincide con una campaign_correlation activa de tipo multi_agent_outage -- ver campaign_correlation abajo. El caso individual sigue abierto y con su propio ciclo de vida; SOLO cambia el mensaje al cliente para indicar que es un evento mas amplio, no un fallo aislado de ese equipo."
+
+maintenance_window_match:
+  description: >-
+    Si el tenant/asset tiene una ventana de mantenimiento programada (dato
+    de asset_context/CMDB, no de Wazuh) que coincide con la desconexion,
+    disconnect_classification='planned_maintenance' y NO se genera
+    notificacion al cliente -- solo se registra para auditoria.
+  policy_validation_status: DISEÑADO
+  # No implementado: requiere que asset_context tenga un campo de ventanas
+  # de mantenimiento, que no existe todavia en specifications/asset_context.schema.json.
+  # Se documenta aqui como requisito pendiente, no se inventa el campo.
+
 material_changes:
-  - "el agente sigue caido mas de 15 minutos (umbral de keepalive)"
-  - "el asset caido es de criticidad alta/critica"
-  - "varios agentes del mismo tenant caen dentro de la misma ventana (posible incidente de red/energia, no fallas independientes)"
+  - "el agente sigue caido mas de stability_window (temporary_disconnect -> persistent_disconnect)"
+  - "el asset caido es de criticidad alta/critica (dato de asset_context que cambia, no el asset_id)"
+
+removed_as_material_change:
+  - "varios agentes del mismo tenant caen dentro de la misma ventana -- fingerprint distinto por asset_id, casos DISTINTOS. Ver campaign_correlation (correlation_type=multi_agent_outage) para relacionar esos casos sin fusionarlos ni tratarlo como cambio material de un caso individual."
+
+# campaign_correlation (v1.3.1): ver specifications/campaign_correlation.schema.json.
+campaign_correlation:
+  correlation_type: multi_agent_outage
+  applies_when:
+    - "3 o mas asset_id del mismo tenant entran en disconnect_classification=temporary_disconnect o persistent_disconnect dentro de una ventana de 10 minutos (posible incidente de red/energia/Manager, no fallas independientes)"
+  never_correlates_across: tenant_id
+  routing_effect: "cuando existe una campaign_correlation activa, el mensaje individual a cada asset cambia de tono (ver disconnect_classification=multi_asset_outage) mencionando que es un evento mas amplio, sin dejar de notificar cada caso segun su propia prioridad"
 
 routing:
   wazuh_route: CANDIDATE
-  client_priority_level: atencion   # sube a urgente con material_change (asset critico o sigue caido)
-  quiet_hours_apply: true           # salvo material_change
+  client_priority_level: atencion   # sube a urgente con material_change (persistent_disconnect + asset critico)
+  quiet_hours_apply: true           # salvo material_change o disconnect_classification=persistent_disconnect en asset critico
   notification_template: "5.9"
 
-human_review_required: false   # sube a true si el material_change es "varios agentes caen a la vez"
+human_review_required: false   # sube a true si disconnect_classification=multi_asset_outage o el asset es critico
 
 known_limitations:
   - "Wazuh NO expone un campo de 'motivo' de la desconexion (ver diccionario_campos_enriquecimiento.csv fila 'Salud sensor'): solo se sabe QUE se desconecto, no POR QUE -- eso lo indaga el operador con el cliente, no se puede automatizar"
-  - "El umbral de 15 minutos (keepalive) es una politica de la App, no un parametro nativo de Wazuh -- Wazuh solo emite el evento 504/506 al momento de la desconexion detectada por el Manager"
+  - "debounce_window/stability_window/flap_count_threshold/cooldown_after_flap son politicas de la App, no parametros nativos de Wazuh -- Wazuh solo emite el evento 504/506 al momento de la desconexion detectada por el Manager, sin ningun mecanismo de debounce propio"
+  - "maintenance_window_match depende de un campo que HOY NO EXISTE en specifications/asset_context.schema.json -- ver nota en esa seccion arriba, queda como requisito de diseño pendiente, no implementado"
 
 policy_validation_status: DISEÑADO

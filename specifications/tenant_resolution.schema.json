@@ -1,0 +1,82 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://kriptome.internal/specifications/tenant_resolution.schema.json",
+  "title": "TenantResolutionResult",
+  "description": "Resultado formal de la resolución de tenant para UN evento/agente. Complementa specifications/tenant_resolution.md (la narrativa de la cadena de resolución) con un contrato de datos verificable. CONTRATO DE DATOS, NO IMPLEMENTADO: no existe hoy un Tenant Resolver funcionando. Las labels de agent.labels.* son EVIDENCIA OPERACIONAL de entrada, nunca la autoridad -- la autoridad es la comparación contra el tenant registry (specifications/tenant.schema.json) y el asset registry (specifications/tenant_asset_assignment.schema.json).",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["agent_id", "resolution_status", "resolved_at"],
+  "properties": {
+    "agent_id": {
+      "type": "string",
+      "description": "agent.id de Wazuh -- ver specifications/wazuh_alert_field_paths.md."
+    },
+    "observed_client_code": {
+      "type": ["string", "null"],
+      "description": "Valor de agent.labels.client_code tal como llegó en el evento. Evidencia operacional, no autoridad -- puede no coincidir con expected_client_code si hay una inconsistencia de configuración."
+    },
+    "expected_tenant_id": {
+      "type": ["string", "null"],
+      "description": "tenant_id resuelto contra el tenant registry (specifications/tenant.schema.json), a través de la asignación activa en el asset registry. Null si no se pudo resolver (ver resolution_status)."
+    },
+    "expected_client_code": {
+      "type": ["string", "null"],
+      "description": "client_code que el tenant registry asocia al expected_tenant_id resuelto -- para comparar contra observed_client_code y detectar mismatches."
+    },
+    "expected_asset_id": {
+      "type": ["string", "null"],
+      "description": "asset_id resuelto contra el asset registry (specifications/tenant_asset_assignment.schema.json)."
+    },
+    "expected_asset_code": {
+      "type": ["string", "null"]
+    },
+    "manager_group": {
+      "type": ["string", "null"],
+      "description": "wazuh_group real del agente en el Manager (ver docs/architecture/WAZUH_GROUP_PRECEDENCE.md), consultado independientemente de la label observada -- es la 'asignación operativa en el Manager', autoridad distinta del label auto-reportado."
+    },
+    "resolution_status": {
+      "type": "string",
+      "enum": [
+        "resolved",
+        "missing_agent",
+        "missing_assignment",
+        "missing_label",
+        "label_mismatch",
+        "group_mismatch",
+        "inactive_tenant",
+        "inactive_asset",
+        "ambiguous_assignment",
+        "quarantined"
+      ],
+      "description": "'resolved' es el ÚNICO estado en el que el evento sigue el flujo normal (caso, IA, comunicación). Cualquier otro estado implica cuarentena: sin caso, sin IA, sin comunicación, con auditoría (ver mismatches)."
+    },
+    "mismatches": {
+      "type": "array",
+      "description": "Lista de inconsistencias detectadas, si las hay. Vacío cuando resolution_status='resolved'.",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["field", "observed_value", "expected_value", "detail"],
+        "properties": {
+          "field": {
+            "type": "string",
+            "enum": ["client_code", "asset_code", "manager_group", "tenant_status", "asset_status"]
+          },
+          "observed_value": { "type": ["string", "null"] },
+          "expected_value": { "type": ["string", "null"] },
+          "detail": { "type": "string", "description": "Explicación legible de la inconsistencia, para el registro de auditoría." }
+        }
+      }
+    },
+    "resolved_at": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "resolver_version": {
+      "type": ["string", "null"],
+      "description": "Versión del proceso/código de resolución que produjo este resultado (para auditar cambios de comportamiento del resolver en el tiempo)."
+    }
+  },
+
+  "$comment": "FLUJO CONCEPTUAL DE RESOLUCIÓN (ver specifications/tenant_resolution.md para la narrativa completa con los 6 checks obligatorios): agent.id -> agent registry -> active assignment (tenant_asset_assignment con assignment_status='verified') -> Wazuh group (comparado contra manager_group observado) -> tenant registry (tenant.schema.json, status='active') -> asset registry -> comparación final con las labels observadas (observed_client_code vs expected_client_code). Cualquier paso que falle produce un resolution_status distinto de 'resolved', nunca un tenant_id inventado ni un fallback silencioso a un tenant por defecto."
+}

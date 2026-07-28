@@ -1,0 +1,17 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://kriptome.internal/examples/client_notifications/example_input_bundle.schema.json",
+  "title": "ExampleInputBundle",
+  "description": "Schema del ENVELOPE compuesto usado en los archivos *.input.json de esta carpeta. IMPORTANTE: este envelope es una conveniencia de lectura para agrupar varios objetos relacionados en un solo archivo de ejemplo -- NO es un objeto real que produzca ningún componente del sistema. Cada clave interna se valida contra SU PROPIO schema individual (ver 'properties' abajo), nunca se finge que el bundle completo cumple client_notification.schema.json ni ningún otro schema de un objeto individual. Ver examples/client_notifications/README.md.",
+  "type": "object",
+  "additionalProperties": false,
+  "minProperties": 1,
+  "properties": {
+    "normalized_event": { "$ref": "../../specifications/normalized_event.schema.json" },
+    "auth_evidence": { "$ref": "../../specifications/auth_evidence.schema.json" },
+    "enrichment_result": { "$ref": "../../specifications/enrichment_result.schema.json" },
+    "asset_context": { "$ref": "../../specifications/asset_context.schema.json" },
+    "risk_result": { "$ref": "../../specifications/risk_result.schema.json" },
+    "procedure": { "$ref": "../../specifications/procedure.schema.json" }
+  }
+}

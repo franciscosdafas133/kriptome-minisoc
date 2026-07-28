@@ -2,10 +2,10 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://kriptome.internal/specifications/enrichment_result.schema.json",
   "title": "EnrichmentResult",
-  "description": "Resultado de UNA consulta de enriquecimiento externo (GeoIP, reputación de IP/hash/dominio, traducción de códigos). Corresponde al 'Tipo 2' de campo descrito en REGLAS_TUNEADAS/GUIA_CAMPOS_ENRIQUECIMIENTO.docx §1: nunca es nativo de Wazuh. Diseñado para vivir detrás de una caché por IOC con TTL (doc 03, nivel de control 6 -- '87 alertas del mismo IOC -> 1 consulta API'). NO implementado -- contrato para cuando exista el conector real.",
+  "description": "Resultado de UNA consulta de enriquecimiento externo (GeoIP, reputación de IP/hash/dominio, traducción de códigos, CISA KEV). Corresponde al 'Tipo 2' de campo descrito en REGLAS_TUNEADAS/GUIA_CAMPOS_ENRIQUECIMIENTO.docx §1: nunca es nativo de Wazuh. Diseñado para vivir detrás de una caché por IOC con TTL (doc 03, nivel de control 6 -- '87 alertas del mismo IOC -> 1 consulta API'). NO implementado -- contrato para cuando exista el conector real.",
   "type": "object",
   "additionalProperties": false,
-  "required": ["ioc_type", "ioc_value", "enrichment_type", "queried_at", "cache_ttl_seconds", "source_provider", "result"],
+  "required": ["ioc_type", "ioc_value", "enrichment_type", "queried_at", "cache_ttl_seconds", "source_provider"],
   "properties": {
     "ioc_type": {
       "type": "string",
@@ -30,15 +30,15 @@
     },
     "source_provider": {
       "type": "string",
-      "description": "Proveedor consultado (p. ej. 'maxmind-geoip', 'abuseipdb', 'virustotal', 'nvd'). No se asume un proveedor específico contratado -- este repo no incluye credenciales ni integración real."
+      "description": "Proveedor consultado (p. ej. 'maxmind-geoip', 'abuseipdb', 'virustotal', 'cisa-kev-local-copy'). No se asume un proveedor específico contratado -- este repo no incluye credenciales ni integración real."
     },
     "result": {
       "type": "object",
-      "description": "Payload específico del tipo de enriquecimiento. Estructura libre por enrichment_type -- no se fuerza un formato único porque cada proveedor devuelve campos distintos (país+ciudad para GeoIP; score+categoría para reputación; resumen de texto para CVE). EXCEPCIÓN: cuando enrichment_type='cisa_kev', el payload DEBE seguir la forma de 'kev_result' definida más abajo (ver $defs.kev_result) -- ese contrato no es libre, porque replica el schema público real del feed de CISA."
+      "description": "Payload libre para enrichment_type distinto de 'cisa_kev' (país+ciudad para GeoIP; score+categoría para reputación; resumen de texto para CVE). Para 'cisa_kev' este campo NO se usa como payload libre -- la forma fija vive en kev_result (ver reglas condicionales al final del schema)."
     },
     "kev_result": {
       "$ref": "#/$defs/kev_result",
-      "description": "Presente y con forma fija SOLO cuando enrichment_type='cisa_kev'. Ver $defs.kev_result para los campos exactos, verificados contra el feed real (https://www.cisa.gov/sites/default/files/feeds/known_exploited_vulnerabilities.json, consultado 2026-07-22)."
+      "description": "Obligatorio y con forma fija cuando enrichment_type='cisa_kev' (ver reglas condicionales al final del schema). Debe estar AUSENTE para cualquier otro enrichment_type."
     },
     "confidence": {
       "type": ["number", "null"],
@@ -53,55 +53,177 @@
     }
   },
 
+  "allOf": [
+    {
+      "if": { "properties": { "enrichment_type": { "const": "cisa_kev" } }, "required": ["enrichment_type"] },
+      "then": {
+        "required": ["ioc_type", "kev_result"],
+        "properties": {
+          "ioc_type": { "const": "cve" },
+          "result": { "type": "object", "maxProperties": 0, "description": "Debe quedar vacío cuando enrichment_type='cisa_kev' -- todo el payload va en kev_result, no aquí (evita que un implementador rellene ambos con datos distintos)." }
+        }
+      },
+      "else": {
+        "not": { "required": ["kev_result"] },
+        "description": "kev_result debe estar AUSENTE para cualquier enrichment_type distinto de 'cisa_kev'."
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "enrichment_type": { "const": "cisa_kev" },
+          "kev_result": { "properties": { "kev_status": { "const": "listed" } }, "required": ["kev_status"] }
+        },
+        "required": ["enrichment_type", "kev_result"]
+      },
+      "then": {
+        "properties": {
+          "kev_result": {
+            "properties": {
+              "is_known_exploited": { "const": true },
+              "cve_id": { "type": "string" },
+              "catalog_version": { "type": "string" },
+              "catalog_fetched_at": { "type": "string" }
+            },
+            "required": ["is_known_exploited", "cve_id", "catalog_version", "catalog_fetched_at"]
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "enrichment_type": { "const": "cisa_kev" },
+          "kev_result": { "properties": { "kev_status": { "const": "not_listed" } }, "required": ["kev_status"] }
+        },
+        "required": ["enrichment_type", "kev_result"]
+      },
+      "then": {
+        "properties": {
+          "kev_result": {
+            "properties": {
+              "is_known_exploited": { "const": false },
+              "cve_id": { "type": "string" },
+              "catalog_version": { "type": "string" },
+              "catalog_fetched_at": { "type": "string" }
+            },
+            "required": ["is_known_exploited", "cve_id", "catalog_version", "catalog_fetched_at"]
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "enrichment_type": { "const": "cisa_kev" },
+          "kev_result": { "properties": { "kev_status": { "const": "no_cve" } }, "required": ["kev_status"] }
+        },
+        "required": ["enrichment_type", "kev_result"]
+      },
+      "then": {
+        "properties": {
+          "kev_result": {
+            "properties": {
+              "is_known_exploited": { "const": null },
+              "cve_id": { "const": null }
+            },
+            "required": ["is_known_exploited", "cve_id"]
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "enrichment_type": { "const": "cisa_kev" },
+          "kev_result": { "properties": { "kev_status": { "const": "stale_catalog" } }, "required": ["kev_status"] }
+        },
+        "required": ["enrichment_type", "kev_result"]
+      },
+      "then": {
+        "properties": {
+          "kev_result": {
+            "properties": {
+              "is_known_exploited": { "const": null },
+              "cve_id": { "type": "string" },
+              "catalog_fetched_at": { "type": "string" }
+            },
+            "required": ["is_known_exploited", "cve_id", "catalog_fetched_at"]
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "enrichment_type": { "const": "cisa_kev" },
+          "kev_result": { "properties": { "kev_status": { "const": "source_error" } }, "required": ["kev_status"] }
+        },
+        "required": ["enrichment_type", "kev_result"]
+      },
+      "then": {
+        "properties": {
+          "kev_result": {
+            "properties": {
+              "is_known_exploited": { "const": null },
+              "cve_id": { "type": "string" }
+            },
+            "required": ["is_known_exploited", "cve_id"]
+          }
+        }
+      }
+    }
+  ],
+
   "$defs": {
     "kev_result": {
       "type": "object",
-      "description": "Contrato CISA KEV. Reglas de negocio (ver policies/case_types/VULNERABILITY_KEV.yaml para la decisión completa): (1) esta consulta se dispara ÚNICAMENTE cuando Wazuh ya entregó un vulnerability.cve válido en el NormalizedEvent, y solo tras validar su formato (regex CVE-\\d{4}-\\d{4,}) -- nunca se consulta KEV de forma especulativa sin un CVE concreto; (2) el resultado ENRIQUECE el caso ya abierto por la detección de Wazuh (recalcula prioridad), NUNCA abre un segundo caso; (3) kev_status='not_listed' es un resultado válido y esperado (la mayoría de CVEs no están en KEV, verificado: el catálogo real tenía 1651 entradas al 2026-07-22 frente a decenas de miles de CVEs existentes) -- no es un error ni un query_failed; (4) la AUSENCIA en KEV no significa que la vulnerabilidad sea segura -- 'not_listed' es 'no está en explotación activa CONOCIDA por CISA', no un veredicto de inocuidad.",
+      "description": "Contrato CISA KEV. Reglas de negocio (ver policies/case_types/VULNERABILITY.yaml para la decisión completa): (1) esta consulta se dispara ÚNICAMENTE cuando Wazuh ya entregó un vulnerability.cve válido en el NormalizedEvent, y solo tras validar su formato (regex CVE-\\d{4}-\\d{4,}) -- nunca se consulta KEV de forma especulativa sin un CVE concreto; (2) el resultado ENRIQUECE el caso ya abierto por la detección de Wazuh (recalcula prioridad, actualiza vulnerability_classification), NUNCA abre un segundo caso; el case_type permanece 'VULNERABILITY' en todo momento; (3) kev_status='not_listed' es un resultado válido y esperado (la mayoría de CVEs no están en KEV, verificado: el catálogo real tenía 1651 entradas al 2026-07-22 frente a decenas de miles de CVEs existentes) -- no es un error ni un query_failed; (4) la AUSENCIA en KEV no significa que la vulnerabilidad sea segura -- 'not_listed' es 'no está en explotación activa CONOCIDA por CISA', no un veredicto de inocuidad. Las relaciones entre kev_status y los demás campos (is_known_exploited, cve_id, catalog_version, catalog_fetched_at) se validan formalmente en las reglas allOf/if/then de enrichment_result.schema.json, no solo en esta descripción.",
       "additionalProperties": false,
       "required": ["kev_status"],
       "properties": {
         "kev_status": {
           "type": "string",
-          "enum": ["listed", "not_listed", "no_cve", "stale_catalog"],
-          "description": "'listed' = el CVE está en el catálogo KEV (dispara/actualiza VULNERABILITY_KEV). 'not_listed' = se consultó contra una copia del catálogo razonablemente actualizada y el CVE NO está en KEV (resultado normal, el caso sigue su ruta VULN genérica; NO implica que sea seguro, solo que CISA no lo tiene listado). 'no_cve' = no se consultó porque el evento no traía un CVE válido -- ver regla de negocio (1); este valor documenta por qué el enriquecimiento no se intentó, en vez de dejar el campo ausente. 'stale_catalog' = existe un CVE válido pero la copia local del catálogo KEV está desactualizada más allá de un umbral aceptable (ver catalog_version/catalog_fetched_at) -- en este estado NO se puede afirmar 'not_listed' con confianza; debe tratarse como dato incompleto, no como ausencia confirmada."
+          "enum": ["listed", "not_listed", "no_cve", "stale_catalog", "source_error"],
+          "description": "'listed' = el CVE está en el catálogo KEV (actualiza vulnerability_classification a 'kev' en el mismo caso VULNERABILITY). 'not_listed' = se consultó contra una copia del catálogo razonablemente actualizada y el CVE NO está en KEV. 'no_cve' = no se consultó porque el evento no traía un CVE válido. 'stale_catalog' = existe un CVE válido y la consulta se completó, pero la copia local del catálogo está desactualizada -- NO se puede afirmar 'not_listed' con confianza, debe tratarse como dato incompleto. 'source_error' (v1.3.1) = existe un CVE válido pero la consulta al feed/caché falló (timeout, proveedor caído, error de red -- ver docs/architecture/ENRICHMENT_RESILIENCE.md) -- distinto de stale_catalog: aquí no hay NINGÚN dato, ni siquiera uno desactualizado; también debe tratarse como dato incompleto e ir a cola humana, nunca inferir not_listed por defecto."
         },
         "is_known_exploited": {
           "type": ["boolean", "null"],
-          "description": "Derivado directo de kev_status: true si kev_status='listed', false si kev_status='not_listed', null si kev_status es 'no_cve' o 'stale_catalog' (no hay un veredicto confiable). Campo explícito para que el consumidor no tenga que repetir la lógica de traducción de kev_status en cada sitio que lo use (p. ej. risk_result.risk_factors)."
+          "description": "Derivado directo de kev_status -- ver reglas allOf/if/then de este schema para los valores exigidos por cada kev_status."
         },
         "cve_id": {
           "type": ["string", "null"],
-          "description": "El CVE consultado (debe coincidir con normalized_event.cve). Null solo si kev_status='no_cve'."
+          "description": "El CVE consultado (debe coincidir con normalized_event.cve). Null solo si kev_status='no_cve' (ver reglas allOf/if/then)."
         },
         "catalog_version": {
           "type": ["string", "null"],
-          "description": "Campo 'catalogVersion' del feed CISA KEV -- versión/fecha de la copia local consultada. Necesario para poder afirmar 'not_listed' con una fecha de referencia, y para decidir cuándo un resultado pasa a kev_status='stale_catalog'."
+          "description": "Campo 'catalogVersion' del feed CISA KEV -- versión/fecha de la copia local consultada."
         },
         "catalog_fetched_at": {
           "type": ["string", "null"],
           "format": "date-time",
-          "description": "Cuándo se sincronizó por última vez la copia local del catálogo consultada (distinto de queried_at, que es cuándo se hizo ESTA consulta puntual contra esa copia)."
+          "description": "Cuándo se sincronizó por última vez la copia local del catálogo consultada."
         },
         "vendor_project": { "type": ["string", "null"], "description": "Campo 'vendorProject' del feed CISA KEV." },
         "product": { "type": ["string", "null"], "description": "Campo 'product' del feed CISA KEV." },
         "vulnerability_name": { "type": ["string", "null"], "description": "Campo 'vulnerabilityName' del feed CISA KEV." },
-        "date_added": { "type": ["string", "null"], "format": "date", "description": "Campo 'dateAdded' del feed CISA KEV -- fecha en que CISA agregó el CVE al catálogo." },
-        "short_description": { "type": ["string", "null"], "description": "Campo 'shortDescription' del feed CISA KEV, en inglés (el feed no provee español -- ver enrichment_type='cve_description_es' para una traducción/resumen separado si se implementa)." },
-        "required_action": { "type": ["string", "null"], "description": "Campo 'requiredAction' del feed CISA KEV -- la acción de mitigación que CISA exige a agencias federales de EE.UU.; se usa como referencia de urgencia, no como texto literal al cliente peruano." },
-        "due_date": { "type": ["string", "null"], "format": "date", "description": "Campo 'dueDate' del feed CISA KEV -- plazo que CISA fija para agencias federales de EE.UU. Referencia de urgencia; el plazo real que Kriptome comunica al cliente (recommended_deadline en client_notification.schema.json) puede ser distinto y más corto." },
+        "date_added": { "type": ["string", "null"], "format": "date", "description": "Campo 'dateAdded' del feed CISA KEV." },
+        "short_description": { "type": ["string", "null"], "description": "Campo 'shortDescription' del feed CISA KEV, en inglés." },
+        "required_action": { "type": ["string", "null"], "description": "Campo 'requiredAction' del feed CISA KEV -- referencia de urgencia, no texto literal al cliente peruano." },
+        "due_date": { "type": ["string", "null"], "format": "date", "description": "Campo 'dueDate' del feed CISA KEV -- referencia de urgencia, no el plazo final comunicado (ver recommended_deadline en client_notification.schema.json)." },
         "known_ransomware_campaign_use": {
           "type": ["string", "null"],
           "enum": ["Known", "Unknown", null],
-          "description": "Campo 'knownRansomwareCampaignUse' del feed CISA KEV -- 'Known' es un factor de riesgo fuerte, debe reflejarse en risk_factors del NormalizedEvent."
+          "description": "Campo 'knownRansomwareCampaignUse' del feed CISA KEV -- 'Known' es un factor de riesgo fuerte (ver risk_result.schema.json factor 'known_exploitation')."
         },
         "cwes": {
           "type": "array",
           "items": { "type": "string" },
-          "description": "Campo 'cwes' del feed CISA KEV (lista de CWE-IDs, p. ej. ['CWE-89'])."
+          "description": "Campo 'cwes' del feed CISA KEV."
         },
         "notes": {
           "type": ["string", "null"],
-          "description": "Campo 'notes' del feed CISA KEV -- normalmente URLs de referencia (aviso del vendor, NVD, guías de CISA). Va en 'detalle_soporte_tecnico' del correo, nunca en el cuerpo dirigido al cliente."
+          "description": "Campo 'notes' del feed CISA KEV. Va en 'detalle_soporte_tecnico', nunca en el cuerpo dirigido al cliente."
         }
       }
     }

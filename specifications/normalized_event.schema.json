@@ -2,27 +2,43 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://kriptome.internal/specifications/normalized_event.schema.json",
   "title": "NormalizedEvent",
-  "description": "Forma normalizada de un evento de Wazuh, sin importar la familia de origen (SSH, Windows, FIM, M365, etc.). Es el contrato de ENTRADA del extractor de campos descrito en REGLAS_TUNEADAS/routing/diccionario_campos_enriquecimiento.csv. Los campos aquí corresponden a los verificados contra decoders/reglas reales de Wazuh v4.14.6 (ver REGLAS_TUNEADAS/GUIA_CAMPOS_ENRIQUECIMIENTO.docx); no se inventan campos que no existan en el evento real. NO es un schema implementado — es el contrato para cuando se construya el extractor (fuera de alcance de este repo, ver README).",
+  "description": "Forma normalizada de UN evento puntual de Wazuh, sin importar la familia de origen (SSH, Windows, FIM, M365, etc.). Es el contrato de ENTRADA del extractor de campos descrito en REGLAS_TUNEADAS/routing/diccionario_campos_enriquecimiento.csv. SEPARACIÓN DE CAPAS (v1.3.1): este objeto representa ÚNICAMENTE el evento puntual tal como lo entrega Wazuh -- NO contiene datos agregados de contexto de negocio, evidencia correlacionada ni riesgo calculado, porque esos datos pertenecen a capas posteriores con su propia fuente de verdad y duplicarlos aquí crea múltiples fuentes de verdad para el mismo dato. Ver la tabla de 'Fuente correcta de cada dato' más abajo. NO es un schema implementado — es el contrato para cuando se construya el extractor (fuera de alcance de este repo, ver README). NOTA DE NOMBRES (v1.3.1, Fase 16): este contrato usa rule_id/rule_level/rule_groups (verificados contra el XML real del ruleset, ver docs/architecture/ARCHITECTURE_CANONICAL.md) en vez de un único objeto 'rule' -- Wazuh no entrega la regla como un objeto anidado sino como campos planos (rule.id/rule.level/rule.groups en el JSON nativo, ver specifications/wazuh_alert_field_paths.md); se conserva esa forma para no inventar una estructura que el Manager no produce. Igual para event_hash/event_hash_version: viven en specifications/event_identity.schema.json (objeto EventIdentity relacionado 1:1 por event_id), no duplicados aquí, para no tener dos fuentes de verdad del mismo hash.",
   "type": "object",
   "additionalProperties": false,
-  "required": ["event_id", "tenant_id", "timestamp", "source", "rule_id", "rule_level"],
+  "required": ["event_id", "tenant_id", "agent_id", "timestamp", "source", "rule_id", "rule_level", "normalization_version"],
   "properties": {
     "event_id": {
       "type": "string",
-      "description": "Identificador único del evento (equivalente a event_hash en el diseño de dedupe, doc 03 nivel de control 1). No es el rule_id."
+      "description": "Identificador único del evento normalizado. Igual a event_identity.schema.json#event_hash cuando la identidad ya fue calculada; ver ese schema para la estrategia de cálculo. No es el rule_id."
+    },
+    "normalization_version": {
+      "type": "string",
+      "description": "Versión del extractor/normalizador que produjo este objeto (p. ej. 'v1'). Permite auditar y migrar el mapeo de REGLAS_TUNEADAS/routing/diccionario_campos_enriquecimiento.csv sin invalidar silenciosamente eventos ya normalizados con una versión anterior -- mismo patrón que fingerprint_version en specifications/case.schema.json."
     },
     "tenant_id": {
       "type": "string",
       "description": "Resuelto SIEMPRE por backend a partir de agent_id -> labels, nunca aceptado directo del frontend. Ver specifications/tenant_resolution.md."
     },
+    "client_code": {
+      "type": ["string", "null"],
+      "description": "agent.labels.client_code tal como llegó en el evento crudo (ver specifications/wazuh_alert_field_paths.md). EVIDENCIA OPERACIONAL, no autoridad -- el tenant_id de este objeto ya fue resuelto/verificado por backend (specifications/tenant_resolution.schema.json); este campo se conserva solo para trazabilidad/auditoría de que la label observada coincidía (o no) con lo resuelto. Null si el evento viene sin label (debe haber generado cuarentena antes de llegar aquí)."
+    },
+    "agent_id": {
+      "type": "string",
+      "description": "agent.id de Wazuh que originó el evento (ver specifications/wazuh_alert_field_paths.md). Identificador TÉCNICO del agente, distinto de asset_id (que es la identidad de negocio del activo, resuelta contra el asset registry)."
+    },
     "asset_id": {
       "type": ["string", "null"],
-      "description": "Identificador del activo/equipo (label asset_id del agente). Null solo si el agente aún no fue provisto de labels (estado que debe generar cuarentena, ver tenant_resolution.md)."
+      "description": "Identificador del activo/equipo, resuelto contra el asset registry a partir de agent_id (no es un valor tomado directo de una label sin verificar). Null solo si el agente aún no fue provisto de labels (estado que debe generar cuarentena, ver tenant_resolution.md). Para el contexto de negocio del activo (asset_alias, criticality, environment_type, site_type, business_service) consultar specifications/asset_context.schema.json usando este asset_id -- NO se duplica aquí."
+    },
+    "asset_code": {
+      "type": ["string", "null"],
+      "description": "agent.labels.asset_code tal como llegó en el evento crudo. EVIDENCIA OPERACIONAL, mismo estatus que client_code arriba -- no sustituye a asset_id ya resuelto."
     },
     "timestamp": {
       "type": "string",
       "format": "date-time",
-      "description": "Momento del evento en el origen, no de la ingesta."
+      "description": "Momento de ESTE evento puntual en el origen, no de la ingesta. Para ventanas de tiempo de un patrón correlacionado (first_seen_at/last_seen_at) ver specifications/case_summary.schema.json."
     },
     "source": {
       "type": "string",
@@ -47,6 +63,10 @@
       "items": { "type": "string" },
       "description": "Grupos de la regla, incluye los grupos kriptome_* de routing (kriptome_candidate, kriptome_critical, etc.) cuando aplica."
     },
+    "decoder": {
+      "type": ["string", "null"],
+      "description": "decoder.name de Wazuh (ver specifications/wazuh_alert_field_paths.md), p. ej. 'sshd', 'windows_eventchannel', 'syscheck_integrity_changed'. Null solo si la familia de origen no expone decoder (infrecuente)."
+    },
     "source_ip": {
       "type": ["string", "null"],
       "description": "Campo srcip / win.eventdata.ipAddress / office365.ClientIP según familia. Ver diccionario_campos_enriquecimiento.csv para el mapeo exacto por familia."
@@ -55,9 +75,21 @@
       "type": ["string", "null"],
       "description": "Campo dstip (firewall) o win.eventdata.destinationIp (Sysmon EID3)."
     },
+    "source_port": {
+      "type": ["integer", "null"],
+      "minimum": 0,
+      "maximum": 65535,
+      "description": "Campo srcport, cuando la familia de origen lo expone (p. ej. firewall, algunos eventos SSH). Null si la familia no lo provee -- no se infiere ni se asume un valor."
+    },
+    "destination_port": {
+      "type": ["integer", "null"],
+      "minimum": 0,
+      "maximum": 65535,
+      "description": "Campo dstport / win.eventdata.destinationPort (Sysmon EID3), cuando la familia de origen lo expone."
+    },
     "target_user": {
       "type": ["string", "null"],
-      "description": "Usuario objetivo/afectado: dstuser (SSH), win.eventdata.targetUserName (Windows/AD), office365.UserId (M365), srcuser (sudo, con la limitación documentada de que el comando ejecutado no es un campo separado)."
+      "description": "Usuario objetivo/afectado EN ESTE EVENTO PUNTUAL: dstuser (SSH), win.eventdata.targetUserName (Windows/AD), office365.UserId (M365), srcuser (sudo, con la limitación documentada de que el comando ejecutado no es un campo separado). Para el conteo agregado y la verificación de coincidencia entre eventos de un mismo caso (matching_user_verified) ver specifications/auth_evidence.schema.json -- no se duplica aquí."
     },
     "file_path": {
       "type": ["string", "null"],
@@ -76,74 +108,17 @@
       "items": { "type": "string" },
       "description": "IDs MITRE ATT&CK ya presentes en la regla que disparó (bloque <mitre><id> del XML)."
     },
-
-    "asset_alias": {
-      "type": ["string", "null"],
-      "description": "Label agent.labels.asset_alias -- nombre de negocio del equipo (p. ej. 'Servidor de facturación'). Es el único identificador que debe llegar al cliente (ver specifications/client_notification.schema.json). Null si el agente aún no tiene ese label configurado."
-    },
-    "hostname": {
-      "type": ["string", "null"],
-      "description": "win.system.computer / nombre real del host que reporta. Dato técnico interno -- nunca se envía al cliente en el cuerpo principal del correo (solo en 'detalle_soporte_tecnico')."
-    },
-    "environment": {
-      "type": ["string", "null"],
-      "enum": ["prod", "staging", "dev", null],
-      "description": "Label agent.labels.environment (ver REGLAS_TUNEADAS/agent-conf/CLI-001_agent.conf.example)."
-    },
-    "criticality": {
-      "type": ["string", "null"],
-      "enum": ["low", "medium", "high", "critical", null],
-      "description": "Label agent.labels.criticality del activo. Determina el routing (ver policies/case_types/*.yaml)."
-    },
-    "business_service": {
-      "type": ["string", "null"],
-      "description": "Servicio de negocio que depende de este activo. No existe hoy como campo nativo de Wazuh -- requiere que el onboarding lo registre en la CMDB (ver DOCUMENTOS/03_FLUJOS_OPERATIVOS.docx §5)."
-    },
-
-    "first_seen_at": {
-      "type": ["string", "null"],
-      "format": "date-time",
-      "description": "Primer evento del patrón correlacionado (p. ej. el primer intento de una racha de fuerza bruta). Distinto de 'timestamp', que es de ESTE evento puntual."
-    },
-    "last_seen_at": {
-      "type": ["string", "null"],
-      "format": "date-time",
-      "description": "Evento más reciente del mismo patrón correlacionado."
-    },
-    "failed_attempt_count": {
-      "type": ["integer", "null"],
-      "minimum": 0,
-      "description": "Para correlaciones de fuerza bruta (frequency/timeframe de reglas como 5763, 60204, 100010, 100011): cuántos intentos fallidos lleva contados la regla al momento de este evento."
-    },
-    "successful_login_count": {
-      "type": ["integer", "null"],
-      "minimum": 0,
-      "description": "Accesos exitosos detectados dentro de la ventana de correlación (relevante para 100012/100013: éxito tras fuerza bruta)."
-    },
     "logon_type": {
       "type": ["string", "null"],
-      "description": "win.eventdata.logonType (p. ej. '3'=red, '10'=RDP). Verificado en rules/0580-win-security_rules.xml. Null fuera de eventos de logon de Windows."
+      "description": "win.eventdata.logonType (p. ej. '3'=red, '10'=RDP) DE ESTE EVENTO PUNTUAL. Verificado en rules/0580-win-security_rules.xml. Null fuera de eventos de logon de Windows. La traducción legible (logon_type_label) vive en specifications/auth_evidence.schema.json."
     },
     "workstation_name": {
       "type": ["string", "null"],
-      "description": "win.eventdata.workstationName -- estación de origen del intento de logon, cuando el decoder la expone."
+      "description": "win.eventdata.workstationName -- estación de origen de ESTE evento de logon, cuando el decoder la expone."
     },
-
-    "risk_score": {
-      "type": ["number", "null"],
-      "minimum": 0,
-      "maximum": 100,
-      "description": "Score de riesgo compuesto. CONTRATO DE DATOS, NO IMPLEMENTADO: no existe hoy un modelo/clasificador construido en este repo que calcule este valor -- debe quedar null hasta que exista, nunca rellenarse con un número inventado."
-    },
-    "risk_factors": {
-      "type": "array",
-      "items": { "type": "string" },
-      "description": "Motivos concretos y trazables a datos reales del evento (p. ej. 'criticality=critical', 'cve en catálogo CISA KEV', 'segundo intento en 24h'). Vacío si no hay factores calculados todavía."
-    },
-
     "raw_event_reference": {
       "type": "string",
-      "description": "Puntero al evento original en el Indexer (no el log completo embebido aquí) -- para que el operador o la App puedan recuperar el detalle completo sin que este objeto normalizado cargue el payload entero."
+      "description": "Puntero al evento original en el Indexer (no el log completo embebido aquí) -- para que el operador o la App puedan recuperar el detalle completo sin que este objeto normalizado cargue el payload entero. Equivalente a source_document_id/source_index de specifications/event_identity.schema.json expresado como referencia consultable de un tirón (p. ej. 'index/document_id')."
     },
     "enrichment_pending": {
       "type": "array",
@@ -151,7 +126,9 @@
         "type": "string",
         "enum": ["geoip", "ip_reputation", "hash_reputation", "domain_reputation", "cve_description_es", "office365_recordtype_translation", "cisa_kev"]
       },
-      "description": "Lista de enriquecimientos externos que este evento requiere y AÚN no se resolvieron (ver columna 'EnriquecimientoExternoNecesario' del diccionario). Ninguno de estos es nativo de Wazuh. 'cisa_kev' se agrega SOLO cuando 'cve' no es null -- ver specifications/enrichment_result.schema.json y policies/case_types/VULNERABILITY_KEV.yaml para la regla completa (la consulta KEV se hace únicamente con un CVE válido entregado por Wazuh, nunca de forma especulativa)."
+      "description": "Lista de enriquecimientos externos que este evento requiere y AÚN no se resolvieron (ver columna 'EnriquecimientoExternoNecesario' del diccionario). Ninguno de estos es nativo de Wazuh. 'cisa_kev' se agrega SOLO cuando 'cve' no es null -- ver specifications/enrichment_result.schema.json y policies/case_types/VULNERABILITY.yaml para la regla completa (la consulta KEV se hace únicamente con un CVE válido entregado por Wazuh, nunca de forma especulativa)."
     }
-  }
+  },
+
+  "$comment": "TABLA DE SEPARACIÓN DE CAPAS (v1.3.1) -- estos campos EXISTÍAN en versiones anteriores de este schema y se retiraron por duplicar la fuente de verdad de capas posteriores. No reintroducir aquí; consultar el objeto correspondiente por asset_id/case_id: asset_alias, environment_type, site_type, criticality, business_service -> specifications/asset_context.schema.json (por asset_id). first_seen_at, last_seen_at, event_count, affected_user_count, affected_asset_count -> specifications/case_summary.schema.json (por case_id). failed_attempt_count, successful_login_count, matching_user_verified, failure_event_ids, success_event_id -> specifications/auth_evidence.schema.json (por case_id). risk_score, priority_level, risk_factors -> specifications/risk_result.schema.json (por case_id). event_hash/event_hash_version -> specifications/event_identity.schema.json (por event_id), no duplicados aquí (Fase 16). EQUIVALENCIAS DE NOMBRE (v1.3.1, Fase 16 -- reconciliación con la nomenclatura genérica usada en discusiones de arquitectura): 'rule' (objeto único) = rule_id + rule_level + rule_groups; 'event_type' = case_type (clasificación de negocio) combinado con source (mecanismo de origen) -- no existe un campo adicional 'event_type' separado porque duplicaría esos dos sin aportar una fuente de verdad nueva; 'raw_reference' = raw_event_reference."
 }

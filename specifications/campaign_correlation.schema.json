@@ -1,0 +1,74 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://kriptome.internal/specifications/campaign_correlation.schema.json",
+  "title": "CampaignCorrelation",
+  "description": "Relaciona CASOS DISTINTOS (fingerprints distintos) del mismo tenant que comparten un origen o patrón común -- p. ej. el mismo file_hash de malware apareciendo en varios activos, el mismo source_ip atacando varias cuentas, o varios agentes cayendo a la vez. NO fusiona los casos técnicos entre sí: cada uno mantiene su propio case_id, evidencia y ciclo de vida. Es una capa de correlación adicional para el operador/informe, extraída como contrato formal en v1.3.1 (antes vivía embebida solo en policies/case_types/AUTH_BRUTEFORCE_SUCCESS.yaml). CONTRATO DE DATOS, NO IMPLEMENTADO.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["campaign_id", "tenant_id", "correlation_type", "related_case_ids", "first_seen_at", "last_seen_at", "status"],
+  "properties": {
+    "campaign_id": {
+      "type": "string",
+      "description": "Identificador propio de la campaña, distinto de cualquier case_id."
+    },
+    "tenant_id": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Un ÚNICO tenant_id -- ver never_correlates_across más abajo. Regla dura, no una preferencia: una campaña nunca cruza tenants dentro de un objeto visible al cliente u operador de un tenant."
+    },
+    "correlation_type": {
+      "type": "string",
+      "enum": [
+        "same_ip_multi_asset",
+        "same_ip_multi_user",
+        "multi_ip_same_user",
+        "same_hash_multi_asset",
+        "multi_agent_outage"
+      ],
+      "description": "Tipo de patrón detectado. same_ip_multi_asset/same_ip_multi_user/multi_ip_same_user vienen de AUTH_BRUTEFORCE_SUCCESS; same_hash_multi_asset de MALWARE_CONFIRMED (el mismo file_hash en varios activos); multi_agent_outage de AGENT_HEALTH (varios agentes caen dentro de la misma ventana)."
+    },
+    "related_case_ids": {
+      "type": "array",
+      "items": { "type": "string", "pattern": "^KRP-[0-9]{4}-[0-9]{6}$" },
+      "minItems": 2,
+      "description": "Lista de case_id (de cualquier case_type compatible con el correlation_type) que forman parte de esta campaña. Mínimo 2 -- una campaña de un solo caso no es una campaña."
+    },
+    "source_ips": {
+      "type": "array",
+      "items": { "type": "string" },
+      "description": "Lista de source_ip involucrados, cuando el correlation_type es de la familia de autenticación."
+    },
+    "file_hashes": {
+      "type": "array",
+      "items": { "type": "string" },
+      "description": "Lista de file_hash involucrados, cuando correlation_type='same_hash_multi_asset'."
+    },
+    "affected_assets": {
+      "type": "array",
+      "items": { "type": "string" },
+      "description": "Lista de asset_id involucrados."
+    },
+    "affected_users": {
+      "type": "array",
+      "items": { "type": "string" },
+      "description": "Lista de target_user involucrados, cuando aplica."
+    },
+    "first_seen_at": {
+      "type": "string",
+      "format": "date-time",
+      "description": "Primer evento de cualquiera de los casos relacionados."
+    },
+    "last_seen_at": {
+      "type": "string",
+      "format": "date-time",
+      "description": "Evento más reciente de cualquiera de los casos relacionados."
+    },
+    "status": {
+      "type": "string",
+      "enum": ["active", "resolved", "closed"],
+      "description": "Ciclo de vida de la CAMPAÑA, independiente del status de cada caso individual (ver policies/case_state_machine.yaml para el ciclo de vida de un caso)."
+    }
+  },
+
+  "$comment": "REGLA DURA never_correlates_across: tenant_id -- una campaña NUNCA cruza tenants, aunque el mismo IOC (IP, hash) ataque a dos clientes distintos de Kriptome (ver specifications/tenant_resolution.md sobre el riesgo de conteo cross-tenant en las correlaciones nativas de Wazuh -- la campaña de negocio no debe repetir ese error a nivel de la capa Kriptome). Puede existir una capa interna GLOBAL para el equipo SOC (p. ej. 'este hash apareció en 3 tenants distintos esta semana', útil para inteligencia de amenazas propia de Kriptome), pero esa capa debe documentarse y construirse SEPARADAMENTE de este objeto, nunca mezclada dentro de un CampaignCorrelation visible a un tenant u operador con acceso a un solo tenant."
+}

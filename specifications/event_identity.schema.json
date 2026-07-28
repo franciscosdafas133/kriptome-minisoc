@@ -1,0 +1,42 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://kriptome.internal/specifications/event_identity.schema.json",
+  "title": "EventIdentity",
+  "description": "Identidad estable de un evento para deduplicación (event_hash, ver doc 03 nivel de control 1). CONTRATO DE DATOS, NO IMPLEMENTADO. Existe porque 'timestamp + rule_id + agent_id' NO es una identidad segura: dos eventos legítimos y distintos pueden compartir esos tres valores (dos intentos de login fallido en el mismo segundo desde el mismo agente y la misma regla), y un replay del mismo lote de ingesta produciría el mismo timestamp+rule_id+agent_id para lo que en realidad ya se procesó -- ambos casos rompen la deduplicación de forma silenciosa.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["event_hash", "event_hash_version", "observed_at"],
+  "properties": {
+    "source_cluster_id": {
+      "type": ["string", "null"],
+      "description": "Identificador del clúster/Indexer de origen (relevante si en el futuro hay más de un clúster Wazuh/Indexer). Null si solo existe un clúster (caso del piloto de 2 tenants, ver implementation/multi_tenant_two_tenant_plan.md)."
+    },
+    "source_index": {
+      "type": ["string", "null"],
+      "description": "Índice del Indexer donde vive el documento original (p. ej. 'wazuh-alerts-4.x-2026.07.22')."
+    },
+    "source_document_id": {
+      "type": ["string", "null"],
+      "description": "_id del documento en el Indexer. Junto con source_cluster_id + source_index, forma la ESTRATEGIA PRINCIPAL de identidad: si el par (cluster, index, document_id) es estable y único (que lo es, por diseño de OpenSearch/Elasticsearch), es preferible a cualquier hash de contenido."
+    },
+    "source_event_id": {
+      "type": ["string", "null"],
+      "description": "Identificador propio del evento si la fuente lo provee (distinto de document_id -- p. ej. un ID de correlación de Wazuh, si existiera). Complementario, no sustituye a la estrategia principal."
+    },
+    "event_hash": {
+      "type": "string",
+      "description": "Identidad final usada para deduplicación (UNIQUE en el motor de casos, ver docs/architecture/CASE_ENGINE_CONCURRENCY.md). Se calcula con la ESTRATEGIA PRINCIPAL (source_cluster_id+source_index+source_document_id) cuando esos tres campos son conocidos y estables. Cuando no exista una identidad de documento estable (p. ej. una fuente que no expone un _id reutilizable), se usa el FALLBACK: un hash de contenido canónico del evento completo normalizado (no solo timestamp+rule_id+agent_id, que es insuficiente -- ver descripción del schema)."
+    },
+    "event_hash_version": {
+      "type": "string",
+      "description": "Versión del algoritmo/estrategia usada para calcular event_hash (p. ej. 'v1-doc-id', 'v1-content-hash'). Permite migrar el algoritmo de hash en el futuro sin invalidar silenciosamente la deduplicación de eventos ya almacenados -- un cambio de versión implica decidir explícitamente cómo tratar los event_hash calculados con la versión anterior."
+    },
+    "observed_at": {
+      "type": "string",
+      "format": "date-time",
+      "description": "Cuándo el Global Internal Ingestor observó/leyó este evento (distinto de normalized_event.timestamp, que es cuándo ocurrió el evento en el origen)."
+    }
+  },
+
+  "$comment": "ESTRATEGIA (resumen normativo): PRINCIPAL = source_cluster_id + source_index + source_document_id (estable, no colisiona, no requiere calcular nada sobre el contenido). FALLBACK = hash de contenido canónico (normalizar el evento a una forma determinística -- orden de claves fijo, sin campos de timestamp de ingesta -- y aplicar un hash criptográfico) cuando no exista una identidad de documento estable. NUNCA usar únicamente timestamp+rule_id+agent_id como base de event_hash: además de la colisión entre eventos legítimos simultáneos, un replay (reprocesar el mismo lote tras un fallo, ver docs/architecture/INGESTION_DESIGN.md) produciría timestamps idénticos a los ya procesados si el reloj de origen no cambia, y el sistema no podría distinguir 'ya lo vi' de 'es un evento nuevo idéntico en esos 3 campos'."
+}

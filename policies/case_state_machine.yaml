@@ -1,0 +1,153 @@
+# Máquina de estados única de un caso Kriptome
+#
+# ESTADO: DISEÑADO. Corrige una inconsistencia real (P0): specifications/case.schema.json
+# (antes de esta pasada) definía su propio enum de 6 estados
+# (open/pending_human_review/pending_client_response/closed_resolved/
+# closed_false_positive/closed_auto) que mezclaba ESTADO con MOTIVO DE CIERRE
+# en el mismo campo, y no incluía la reapertura como transicion formal.
+#
+# Este archivo es la UNICA fuente de verdad de los estados de un caso.
+# Ningun otro documento/schema debe definir un enum de estados distinto --
+# case.schema.json referencia estos mismos valores (ver Fase 9).
+#
+# DECISION: el motivo de cierre es un atributo SEPARADO del estado
+# (resolution_type), y la reapertura es una TRANSICION (closed -> triaging),
+# no un estado permanente llamado "reopened".
+
+version: "1"
+policy_validation_status: DISEÑADO
+
+states:
+  - name: new
+    description: "Caso recien creado por el motor de casos a partir del primer evento con un fingerprint nuevo. Aun no fue triado."
+  - name: triaging
+    description: "El motor de casos (o un operador) esta evaluando el caso: aplicando la politica de riesgo, buscando un procedimiento autorizado, decidiendo si requiere revision humana."
+  - name: observing
+    description: "El caso se mantiene abierto acumulando eventos (event_count++) sin que haya ocurrido un cambio material -- equivalente al 'repeticion = event_count++, 0 IA, 0 correo' del diseno original (doc 03 nivel de control 5)."
+  - name: pending_human
+    description: "Requiere revision humana obligatoria antes de continuar (ver human_review_required en policies/case_types/*.yaml). Ningun mensaje sale al cliente mientras el caso esta en este estado."
+  - name: ready_to_communicate
+    description: "La comunicacion (plantilla determinista o salida de IA) fue generada y VALIDADA (ver Validator en docs/architecture/ARCHITECTURE_CANONICAL.md), y aprobada si requeria revision humana. Lista para entrar al Transactional Outbox."
+  - name: waiting_client
+    description: "La comunicacion se envio y el caso espera una respuesta del cliente (ver specifications/inbound_message.schema.json)."
+  - name: monitoring
+    description: "El caso ya no espera accion inmediata (p. ej. el cliente respondio 'atendido' pero se mantiene una ventana de observacion antes de cerrar, o es un caso de baja prioridad en digest)."
+  - name: resolved
+    description: "El caso se resolvio operativamente (la accion definida se ejecuto), pero AUN no cumple los criterios de cierre formal (evidencia + documentacion, ver doc 03 §11). Paso intermedio antes de 'closed', no un estado final."
+  - name: closed
+    description: "Estado final. Requiere resolution_type poblado (ver abajo). Un caso closed NUNCA se edita retroactivamente -- solo se reabre via la transicion closed -> triaging."
+
+# El motivo de cierre es un atributo del caso, NO un estado. Vive junto al
+# caso (ver actualizacion de specifications/case.schema.json) y solo es
+# obligatorio cuando status='closed'.
+resolution_type:
+  - resolved
+  - false_positive
+  - expected_activity
+  - auto_recovered
+  - no_response
+  - duplicate
+
+# Transiciones permitidas. from/to/allowed_actors/required_conditions/audit_event
+# son los 5 atributos que el prompt exige para cada transicion.
+transitions:
+  - from: new
+    to: triaging
+    allowed_actors: [system]
+    required_conditions: ["case creado por el motor de casos"]
+    audit_event: case.triage_started
+
+  - from: triaging
+    to: observing
+    allowed_actors: [system]
+    required_conditions: ["no hay cambio material detectado", "el caso no requiere revision humana"]
+    audit_event: case.observing_started
+
+  - from: triaging
+    to: pending_human
+    allowed_actors: [system]
+    required_conditions: ["human_review_required=true segun la policy del case_type", "o el Validator rechazo la comunicacion generada"]
+    audit_event: case.escalated_to_human
+
+  - from: triaging
+    to: ready_to_communicate
+    allowed_actors: [system]
+    required_conditions: ["la policy del case_type NO requiere revision humana", "existe un Procedure con status=approved para este case_type/priority_level", "el Validator aprobo la comunicacion generada"]
+    audit_event: case.ready_to_communicate
+
+  - from: observing
+    to: triaging
+    allowed_actors: [system]
+    required_conditions: ["se detecto un cambio material (ver material_changes en policies/case_types/*.yaml)"]
+    audit_event: case.material_change_detected
+
+  - from: pending_human
+    to: ready_to_communicate
+    allowed_actors: [operator]
+    required_conditions: ["el operador aprobo (o edito y aprobo) la comunicacion propuesta"]
+    audit_event: case.human_approved
+
+  - from: pending_human
+    to: triaging
+    allowed_actors: [operator]
+    required_conditions: ["el operador determino que el caso requiere mas analisis antes de comunicar (p.ej. solicitar mas evidencia)"]
+    audit_event: case.human_requested_more_evidence
+
+  - from: pending_human
+    to: closed
+    allowed_actors: [operator]
+    required_conditions: ["el operador determino directamente que es un falso positivo (resolution_type=false_positive)", "o actividad esperada (resolution_type=expected_activity)"]
+    audit_event: case.closed_by_human
+
+  - from: ready_to_communicate
+    to: waiting_client
+    allowed_actors: [system]
+    required_conditions: ["el mensaje se registro en el Transactional Outbox y fue enviado (ver docs/architecture/AUDIT_AND_OUTBOX.md)"]
+    audit_event: case.notification_sent
+
+  - from: waiting_client
+    to: monitoring
+    allowed_actors: [system, operator]
+    required_conditions: ["el cliente respondio y la respuesta no requiere accion adicional inmediata (ver specifications/inbound_message.schema.json)"]
+    audit_event: case.client_responded
+
+  - from: waiting_client
+    to: pending_human
+    allowed_actors: [system]
+    required_conditions: ["no hubo respuesta del cliente dentro del SLA definido (no_response, ver DOCUMENTOS/07_COMUNICACION_CON_EL_CLIENTE.docx para los tiempos de referencia -- documento historico solo en el mecanismo A/B/C, vigente en tiempos de SLA)"]
+    audit_event: case.no_response_escalated
+
+  - from: monitoring
+    to: resolved
+    allowed_actors: [system, operator]
+    required_conditions: ["la accion definida en el Procedure se ejecuto y no aparecio nueva evidencia dentro de la ventana de observacion"]
+    audit_event: case.resolved
+
+  - from: resolved
+    to: closed
+    allowed_actors: [operator]
+    required_conditions: ["se registro resolution_type", "se registro evidencia y conclusion (doc 03 §11)"]
+    audit_event: case.closed
+
+  - from: triaging
+    to: closed
+    allowed_actors: [system, operator]
+    required_conditions: ["duplicado exacto (resolution_type=duplicate) o el caso nunca debio abrirse"]
+    audit_event: case.closed_early
+
+  # Reapertura: transicion explicita, NO un estado permanente "reopened".
+  - from: closed
+    to: triaging
+    allowed_actors: [system]
+    required_conditions: [
+      "nuevo evento con el MISMO fingerprint dentro de la ventana de reapertura definida en la policy del case_type (ver reopen_policy en policies/case_types/*.yaml)",
+      "se registra reopened_at, reopen_reason y previous_closed_at en el caso (ver actualizacion de specifications/case.schema.json)"
+    ]
+    audit_event: case.reopened
+
+# Campos que el caso debe llevar para soportar la transicion de reapertura
+# (ver specifications/case.schema.json, seccion "Campos de reapertura").
+reopen_fields:
+  - reopened_at
+  - reopen_reason
+  - previous_closed_at

@@ -2,17 +2,17 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://kriptome.internal/specifications/client_notification.schema.json",
   "title": "ClientNotification",
-  "description": "Estructura de UN correo al cliente. Decisión de comunicación (v1.3.0): un solo mensaje con una acción recomendada clara; el cliente responde al mismo correo con texto libre indicando si reconoce la actividad, quién la realizó, por qué motivo, qué acciones ejecutó y si encontró cambios extraños -- no se ofrece un menú de respuestas A/B/C. NOTA DE DESALINEACIÓN CONOCIDA (sin resolver aún): `DOCUMENTOS/07_COMUNICACION_CON_EL_CLIENTE.docx` (documento funcional, NO editado en este repo) todavía especifica el flujo A/B/C en sus 15 plantillas -- verificado línea por línea antes de esta revisión. Esta desalineación persiste hasta que se reciba y apruebe una actualización formal de ese documento; cualquier implementación real de envío de correo debe decidir explícitamente cuál de los dos diseños sigue. No implica envío real de correo: ver README.md §'Qué NO está implementado' para el alcance de este repo.",
+  "description": "Estructura de UN correo al cliente. DECISIÓN VIGENTE (ver DOCUMENTATION_SOURCE_OF_TRUTH.md): un solo mensaje con una acción recomendada clara; el cliente responde al mismo correo con texto libre indicando si reconoce la actividad, quién la realizó, por qué motivo, qué acciones ejecutó y si encontró cambios extraños -- no se ofrece un menú de respuestas A/B/C. `DOCUMENTOS/07_COMUNICACION_CON_EL_CLIENTE.docx` queda HISTÓRICO para el mecanismo de respuesta (ver DOCUMENTATION_SOURCE_OF_TRUTH.md); sigue siendo referencia de tono y de la taxonomía de 15 escenarios. No implica envío real de correo: ver README.md §'Qué NO está implementado'.",
   "type": "object",
   "additionalProperties": false,
-  "required": ["case_id", "tenant_id", "message_type", "priority_level", "template_id", "recipient_level", "message_key", "body_sections"],
+  "required": ["case_id", "tenant_id", "message_type", "priority_level", "template_id", "recipient_level", "message_key", "subject", "body_sections", "language", "delivery_status", "out_of_band_confirmation_required"],
   "properties": {
     "case_id": { "type": "string", "pattern": "^KRP-[0-9]{4}-[0-9]{6}$" },
     "tenant_id": { "type": "string" },
     "message_type": {
       "type": "string",
       "enum": ["alerta_inicial", "actualizacion", "recordatorio", "cierre", "digest_semanal", "informe_mensual"],
-      "description": "Corresponde a las plantillas 5.1-5.10 (alerta_inicial por case_type), 5.11 (actualizacion), 5.12 (recordatorio), 5.13 (cierre), 5.14 (digest_semanal), 5.15 (informe_mensual) del doc 07 (fuente histórica; ver nota de desalineación en la descripción del schema)."
+      "description": "Determina qué bloques estructurados son obligatorios -- ver las reglas if/then/else al final de este schema."
     },
     "priority_level": {
       "type": "string",
@@ -20,7 +20,7 @@
     },
     "template_id": {
       "type": "string",
-      "description": "Referencia a la sección de la plantilla usada, p. ej. '5.2'. Debe existir en DOCUMENTOS/07_COMUNICACION_CON_EL_CLIENTE.docx §5 como fuente histórica de tono/estructura -- el flujo de respuesta real es el de este schema, no A/B/C."
+      "description": "Referencia a la sección de la plantilla usada, p. ej. '5.2'. `DOCUMENTOS/07_COMUNICACION_CON_EL_CLIENTE.docx` §5 sigue siendo la referencia de tono/estructura para esta plantilla (documento HISTÓRICO solo en el mecanismo de respuesta A/B/C, ver DOCUMENTATION_SOURCE_OF_TRUTH.md)."
     },
     "recipient_level": {
       "type": "string",
@@ -33,6 +33,7 @@
     },
     "subject": {
       "type": "string",
+      "minLength": 1,
       "description": "Debe incluir [case_id] al inicio."
     },
 
@@ -40,54 +41,47 @@
       "type": "object",
       "description": "Estructura obligatoria del cuerpo del mensaje dirigido al cliente. No debe contener rule_id, IDs MITRE ni nombres de schemas -- eso va exclusivamente en technical_appendix.",
       "additionalProperties": false,
-      "required": ["nivel_de_atencion", "que_paso", "por_que_importa", "que_debe_hacer_usted", "que_no_debe_hacer", "que_esta_haciendo_kriptome", "instrucciones_de_respuesta"],
+      "required": ["nivel_de_atencion", "que_paso", "por_que_importa", "datos_principales", "que_debe_hacer_usted", "que_no_debe_hacer", "que_esta_haciendo_kriptome", "instrucciones_de_respuesta", "detalle_soporte_tecnico"],
       "properties": {
-        "nivel_de_atencion": { "type": "string", "description": "Uno de: Informativo / Atención / Urgente / Crítico (ver doc 07 §1)." },
+        "nivel_de_atencion": { "type": "string", "description": "Uno de: Informativo / Atención / Urgente / Crítico." },
         "que_paso": { "type": "string", "description": "Qué ocurrió, en lenguaje simple, sin jerga técnica." },
         "por_que_importa": { "type": "string" },
         "datos_principales": {
           "type": "string",
-          "description": "Resumen en lenguaje simple de los datos clave del incidente (equipo, cuenta, hora, origen) -- la versión legible de incident_facts, NUNCA con nombres de campo técnicos ni jerga (eso va en technical_appendix)."
+          "description": "Resumen en lenguaje simple de los datos clave del incidente (equipo, cuenta, hora, origen), derivado de incident_facts -- NUNCA con nombres de campo técnicos ni jerga (eso va en technical_appendix). Puede ser cadena vacía únicamente cuando message_type no requiere incident_facts (ver reglas if/then/else)."
         },
         "que_debe_hacer_usted": { "type": "string" },
         "que_no_debe_hacer": { "type": "string" },
-        "que_esta_haciendo_kriptome": { "type": "string" },
+        "que_esta_haciendo_kriptome": {
+          "type": "string",
+          "description": "Debe describir únicamente capacidades que existen hoy en el servicio, nunca una capacidad no implementada (p. ej. no afirmar bloqueo automático si no existe). Ver examples/client_notifications/README.md para el criterio de lenguaje honesto."
+        },
         "instrucciones_de_respuesta": {
           "type": "string",
           "description": "Pide responder al mismo correo indicando si reconoce la actividad, quién la realizó, por qué motivo, qué acciones ejecutó, y si encontró cambios extraños. NO es un menú A/B/C -- es una solicitud de respuesta en texto libre guiada por estas preguntas."
         },
         "detalle_soporte_tecnico": {
           "type": "string",
-          "description": "Texto renderizado a partir de technical_appendix, para reenviar al soporte técnico del cliente si lo tiene. NUNCA va mezclado en las secciones anteriores."
+          "description": "Texto renderizado a partir de technical_appendix, para reenviar al soporte técnico del cliente si lo tiene. NUNCA va mezclado en las secciones anteriores. Puede ser cadena vacía si no hay detalle técnico aplicable (p. ej. informe_mensual agregado)."
         }
       }
     },
 
     "incident_facts": {
       "type": "object",
-      "description": "Hechos estructurados del incidente -- fuente de datos de 'datos_principales' en body_sections. Cada campo debe ser trazable a un dato real (normalized_event, auth_evidence, asset_context o un enrichment_result); ningún campo se rellena con un valor inventado. Todos los campos son opcionales a nivel de schema porque no todo case_type los produce todos (p. ej. FIM no tiene source_ip).",
+      "description": "Hechos del incidente PUNTUAL, referenciados desde sus fuentes propias -- este objeto NO duplica datos de AssetContext/AuthEvidence/RiskResult, los referencia por ID (ver asset_id, case_id) y solo añade los campos de traducción/enriquecimiento que son exclusivos de la notificación (geo, reputación, tipo de acceso legible). Para el resto de datos (asset_alias, criticality, business_service, first_seen_at, last_seen_at, failed_attempt_count, successful_login_count, risk_score, risk_factors) consultar los objetos correspondientes: specifications/asset_context.schema.json, specifications/auth_evidence.schema.json, specifications/case_summary.schema.json, specifications/risk_result.schema.json.",
       "additionalProperties": false,
       "properties": {
-        "asset_alias": { "type": ["string", "null"], "description": "Ver specifications/asset_context.schema.json." },
-        "hostname": { "type": ["string", "null"], "description": "Dato técnico -- va a technical_appendix, no al cuerpo dirigido al cliente." },
-        "environment": { "type": ["string", "null"], "enum": ["prod", "staging", "dev", null] },
-        "business_service": { "type": ["string", "null"] },
-        "criticality": { "type": ["string", "null"], "enum": ["low", "medium", "high", "critical", null] },
-        "target_user": { "type": ["string", "null"], "description": "Cuenta objetivo/afectada. Ver specifications/auth_evidence.schema.json para las reglas de verificación antes de nombrarla en el cuerpo del mensaje." },
+        "asset_id": { "type": ["string", "null"], "description": "Referencia a AssetContext.asset_id -- NO se repite asset_alias/criticality/environment_type/site_type/business_service aquí, se consultan en asset_context." },
+        "target_user": { "type": ["string", "null"], "description": "Cuenta objetivo/afectada. Ver specifications/auth_evidence.schema.json para las reglas de verificación (matching_user_verified) antes de nombrarla en el cuerpo del mensaje." },
         "source_ip": { "type": ["string", "null"] },
         "access_type": { "type": ["string", "null"], "description": "Traducción legible de logon_type (p. ej. 'red', 'escritorio remoto') -- ver specifications/auth_evidence.schema.json campo logon_type_label." },
-        "workstation_name": { "type": ["string", "null"] },
-        "first_seen_at": { "type": ["string", "null"], "format": "date-time" },
-        "last_seen_at": { "type": ["string", "null"], "format": "date-time" },
-        "successful_login_at": { "type": ["string", "null"], "format": "date-time" },
-        "failed_attempt_count": { "type": ["integer", "null"], "minimum": 0 },
-        "successful_login_count": { "type": ["integer", "null"], "minimum": 0 },
         "geo_country": { "type": ["string", "null"], "description": "Enriquecimiento externo (GeoIP) -- nunca nativo de Wazuh, ver enrichment_result.schema.json." },
         "geo_city": { "type": ["string", "null"] },
         "isp_or_asn": { "type": ["string", "null"], "description": "Proveedor de Internet / ASN del source_ip, si el enriquecimiento GeoIP/reputación lo provee." },
         "reputation_verdict": { "type": ["string", "null"], "description": "Veredicto del enrichment_result de tipo ip_reputation (p. ej. 'malicious', 'clean', 'unknown')." },
         "source_seen_before": { "type": ["boolean", "null"], "description": "Si este source_ip ya había aparecido antes contra este tenant (dato de caché de IOC, no un cálculo garantizado)." },
-        "authorized_source_match": { "type": ["boolean", "null"], "description": "Si el source_ip coincide con una fuente autorizada conocida (p. ej. VPN corporativa, proveedor de TI registrado). Null si no hay lista de fuentes autorizadas configurada para el tenant." }
+        "authorized_source_match": { "type": ["boolean", "null"], "description": "Si el source_ip coincide con una fuente autorizada conocida. Null si no hay lista de fuentes autorizadas configurada para el tenant." }
       }
     },
 
@@ -103,14 +97,14 @@
           "items": { "type": "string" },
           "description": "Lista de motivos en texto, derivados de risk_result.risk_factors[].explanation."
         },
-        "risk_policy_version": { "type": ["string", "null"], "description": "Versión de la política de riesgo aplicada (para poder auditar por qué se calculó así en su momento)." },
+        "risk_policy_version": { "type": ["string", "null"] },
         "calculated_at": { "type": ["string", "null"], "format": "date-time" }
       }
     },
 
     "action_plan": {
       "type": "object",
-      "description": "Las acciones comunicadas al cliente DEBEN provenir de un procedure (ver specifications/procedure.schema.json) -- la IA puede mejorar la redacción, pero no inventar acciones fuera del procedimiento aprobado.",
+      "description": "Las acciones comunicadas al cliente DEBEN provenir de un procedure APROBADO (status='approved' en specifications/procedure.schema.json) -- la IA puede mejorar la redacción, pero no inventar acciones fuera del procedimiento aprobado, y un procedure en status='draft' NO puede ser la fuente de una notificación real (ver procedures/README.md).",
       "additionalProperties": false,
       "required": ["customer_actions", "do_not_do"],
       "properties": {
@@ -119,11 +113,12 @@
         "customer_actions": {
           "type": "array",
           "items": { "type": "string" },
-          "description": "Acciones concretas pedidas al cliente, en frases claras. Debe ser un subconjunto de procedure.customer_actions, no texto libre inventado."
+          "description": "Acciones concretas pedidas al cliente. Debe ser un subconjunto de procedure.customer_actions de un procedure con status='approved', no texto libre inventado."
         },
         "do_not_do": {
           "type": "array",
-          "items": { "type": "string" }
+          "items": { "type": "string" },
+          "description": "Prohibiciones. Deben provenir de decision_points condicionales del procedure (ver specifications/procedure.schema.json), no de reglas universales sin contexto (p. ej. 'nunca cerrar la sesión' sin condición es inválido -- ver procedure.decision_points)."
         },
         "evidence_to_preserve": {
           "type": "array",
@@ -136,7 +131,7 @@
         },
         "escalation_contact": {
           "type": ["string", "null"],
-          "description": "A quién contactar si el cliente necesita apoyo o no puede completar la acción (p. ej. 'soporte@kriptome...' o un teléfono). No es el mismo campo que recipient_level."
+          "description": "A quién contactar si el cliente necesita apoyo. No es el mismo campo que recipient_level."
         }
       }
     },
@@ -162,7 +157,7 @@
       }
     },
 
-    "language": { "type": "string", "const": "es-PE", "description": "Español, en lenguaje simple, dirigido a un dueño de MYPE peruana (no técnico)." },
+    "language": { "type": "string", "const": "es-PE", "description": "Español, en lenguaje simple, dirigido a un destinatario no técnico (MYPE o tenant residencial -- ver specifications/asset_context.schema.json site_type)." },
     "sent_at": { "type": ["string", "null"], "format": "date-time" },
     "delivery_status": {
       "type": "string",
@@ -173,5 +168,50 @@
       "type": "boolean",
       "description": "true para acciones sensibles propuestas (bloquear/aislar/apagar) -- confirmación telefónica obligatoria, nunca solo por correo."
     }
-  }
+  },
+
+  "allOf": [
+    {
+      "if": {
+        "properties": { "message_type": { "const": "alerta_inicial" } }
+      },
+      "then": {
+        "required": ["incident_facts", "risk_explanation", "action_plan", "technical_appendix"]
+      }
+    },
+    {
+      "if": {
+        "properties": { "message_type": { "const": "actualizacion" } }
+      },
+      "then": {
+        "required": ["incident_facts", "risk_explanation", "action_plan", "technical_appendix"]
+      }
+    },
+    {
+      "if": {
+        "properties": { "message_type": { "const": "cierre" } }
+      },
+      "then": {
+        "required": ["incident_facts", "risk_explanation", "action_plan", "technical_appendix"]
+      }
+    },
+    {
+      "if": {
+        "properties": { "message_type": { "enum": ["digest_semanal", "informe_mensual"] } }
+      },
+      "then": {
+        "description": "Los mensajes agregados (digest/informe) no describen UN incidente puntual -- no requieren incident_facts/risk_explanation/action_plan/technical_appendix de un solo caso. La regla de negocio real (agregación de múltiples casos) vive fuera del alcance de este schema (no implementado); aquí solo se documenta la excepción explícita para que no se exija erróneamente la estructura de un mensaje puntual.",
+        "not": { "required": ["incident_facts"] }
+      }
+    },
+    {
+      "if": {
+        "properties": { "message_type": { "const": "recordatorio" } }
+      },
+      "then": {
+        "required": ["action_plan"],
+        "description": "Un recordatorio reitera la acción pendiente (action_plan) sobre un caso ya notificado -- no repite incident_facts/risk_explanation/technical_appendix completos, aunque puede incluirlos opcionalmente."
+      }
+    }
+  ]
 }

@@ -1,0 +1,49 @@
+# PROC-VULN-001
+# Procedimiento para VULNERABILITY (case_type unico, ver
+# policies/case_types/VULNERABILITY.yaml -- cubre tanto el caso generico
+# como el escalado a KEV via vulnerability_classification).
+# ESTADO: draft -- NO puede usarse para comunicar al cliente hasta que un
+# humano lo apruebe (ver procedures/README.md).
+
+procedure_id: PROC-VULN-001
+procedure_version: "1"
+title: "Vulnerabilidad detectada (genérica o KEV) -- respuesta autorizada"
+owner: "Kriptome SOC Lead"
+case_type: VULNERABILITY
+priority_levels:
+  - atencion
+  - urgente
+  - critico
+
+customer_actions:
+  - "Coordinar con su proveedor de TI o desarrollador la actualización del componente afectado"
+  - "Confirmar con su proveedor cuándo se aplicará la actualización"
+
+internal_actions:
+  - "monitorear el activo con mayor sensibilidad mientras la vulnerabilidad siga activa"
+  - "verificar el enriquecimiento KEV más reciente antes de cada comunicación (ver specifications/enrichment_result.schema.json)"
+
+do_not_do: []
+
+decision_points:
+  vulnerability_classification:
+    description: "Clasificación actual del caso (ver policies/case_types/VULNERABILITY.yaml) -- determina la urgencia real de la comunicación."
+    "generic":
+      - "incluir en el digest priorizado, sin plazo estricto"
+    "kev":
+      - "notificar con prioridad crítica, sin esperar al digest"
+      - "fijar un plazo recomendado propio (no copiar dueDate de CISA literalmente)"
+    "ransomware_related":
+      - "notificar con prioridad crítica y escalar a revisión humana inmediata"
+    "unsupported_product":
+      - "recomendar migración o mitigación compensatoria, coordinando con el proveedor de TI del cliente"
+
+evidence_to_preserve: []
+
+recommended_deadline: "PT72H"
+human_review_required: true
+out_of_band_confirmation_required: false
+
+approved_by: null
+approved_at: null
+status: draft

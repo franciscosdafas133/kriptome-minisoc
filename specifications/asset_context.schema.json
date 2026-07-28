@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://kriptome.internal/specifications/asset_context.schema.json",
   "title": "AssetContext",
-  "description": "Contexto de negocio de un activo (equipo/servicio). Es la fuente de asset_alias y demás datos que se muestran al cliente en client_notification.schema.json. Ninguno de estos campos es nativo de Wazuh -- provienen de los labels del agente (ver REGLAS_TUNEADAS/agent-conf/) y/o de una CMDB que este repo no implementa.",
+  "description": "Contexto de negocio de un activo (equipo/servicio). Es la fuente de asset_alias y demás datos que se muestran al cliente en client_notification.schema.json. Ninguno de estos campos es nativo de Wazuh -- provienen de los labels del agente (ver REGLAS_TUNEADAS/agent-conf/) y/o de una CMDB que este repo no implementa. v1.3.1: admite tenants residenciales además de empresariales -- ejemplo 'Casa del CEO': {environment_type: 'personal', site_type: 'home'}; ejemplo empresa: {environment_type: 'production', site_type: 'office'}. Ver specifications/tenant.schema.json (tenant_type='home') para el contrato de tenant correspondiente.",
   "type": "object",
   "additionalProperties": false,
   "required": ["tenant_id", "asset_id", "asset_alias"],
@@ -17,9 +17,15 @@
       "type": ["string", "null"],
       "description": "Nombre técnico real del equipo (win.system.computer / hostname de syslog). Uso interno / technical_appendix únicamente."
     },
-    "environment": {
+    "environment_type": {
       "type": ["string", "null"],
-      "enum": ["prod", "staging", "dev", null]
+      "enum": ["production", "staging", "development", "testing", "lab", "personal", "unknown", null],
+      "description": "Reemplaza al campo 'environment' (v1.3.0, valores prod/staging/dev) que no admitía un tenant residencial. 'personal' es el valor para un tenant tipo hogar (p. ej. la casa de un responsable de la empresa) -- ver site_type para el complemento de este campo. 'unknown' cuando el onboarding no lo registró."
+    },
+    "site_type": {
+      "type": ["string", "null"],
+      "enum": ["home", "office", "branch", "datacenter", "cloud", "hybrid", "unknown", null],
+      "description": "Tipo de sitio físico/lógico donde vive el activo. Complementa environment_type: un tenant residencial típicamente combina environment_type='personal' + site_type='home'; una empresa típica combina environment_type='production' + site_type='office'. Ambos campos son independientes -- un laboratorio de pruebas de una empresa puede ser environment_type='lab' + site_type='office'."
     },
     "criticality": {
       "type": ["string", "null"],

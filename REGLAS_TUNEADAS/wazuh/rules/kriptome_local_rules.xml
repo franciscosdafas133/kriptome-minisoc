@@ -176,23 +176,45 @@
   </rule>
 
   <!-- =======================================================================
-       100030 — Whitelist FIM por lista CDB   [ESTADO: VALIDADO-XML]
+       100030 — Whitelist FIM GLOBAL por lista CDB   [ESTADO: VALIDADO-XML]
        (Alcance: activacion opcional por cliente — cada Manager decide si la
        carga; no es un estado de validacion, es una decision de despliegue.)
        ==
-       QUE HACE: silencia FIM en paths de PURO ruido (ej. heartbeat).
-       FIX vs doc: en vez de hardcodear el path en la regla, usa lista CDB;
-       Ops añade paths a etc/lists/kriptome-fim-whitelist sin tocar XML.
-       Campo 'file' VALIDADO (99901 nativo usa $(file)).
-       LIMITACION: match_key es match EXACTO de la clave -> sirve para archivos
-       concretos, NO para directorios/regex. Para ruido a nivel de carpeta usa
-       <ignore type="sregex"> en el agent.conf (ver agent-conf/). NUNCA
-       whitelistear /etc, /bin, System32, drivers, tareas programadas.
+       QUE HACE: silencia FIM en paths de PURO ruido UNIVERSAL (ej. heartbeat
+       propio de la infraestructura de Kriptome, presente en TODOS los
+       tenants por igual). FIX vs doc: en vez de hardcodear el path en la
+       regla, usa lista CDB; Ops añade paths a etc/lists/kriptome-fim-whitelist
+       sin tocar XML. Campo 'file' VALIDADO (99901 nativo usa $(file)).
+
+       LIMITACION (match_key exacto): sirve para archivos concretos, NO para
+       directorios/regex. Para ruido a nivel de carpeta usa <ignore
+       type="sregex"> en el agent.conf (ver agent-conf/). NUNCA whitelistear
+       /etc, /bin, System32, drivers, tareas programadas.
+
+       REGLA DE ALCANCE (v1.3.1, Fase 14: separacion global vs tenant-specific):
+       esta lista (etc/lists/kriptome-fim-whitelist) es GLOBAL al Manager y
+       por tanto SOLO puede contener ruido UNIVERSAL APROBADO: rutas que
+       son ruido en CUALQUIER tenant atendido por este Manager (p.ej. el
+       heartbeat propio de la plataforma Kriptome). NUNCA se agrega aqui una
+       excepcion que solo aplique a UN tenant especifico: eso silenciaria
+       FIM tambien para los demas tenants que comparten el mismo Manager
+       (una ruta whitelisteada para el tenant A quedaria invisible tambien
+       para el tenant B, aunque en B esa misma ruta si sea sospechosa).
+
+       Las excepciones TENANT-SPECIFIC deben vivir en una de estas dos capas,
+       nunca en esta lista global:
+         (a) agent.conf del GRUPO del tenant (ver
+             REGLAS_TUNEADAS/agent-conf/CLI-001_agent.conf.example), cuando
+             es una decision de QUE SE RECOLECTA (ignore/directories), o
+         (b) la false-positive policy de la Kriptome App (motor de casos,
+             ver doc 03 politica de FP), cuando es una decision de NEGOCIO
+             sobre ese tenant especifico (p.ej. "este cliente instala este
+             archivo todos los meses, es su proceso legitimo").
        ======================================================================= -->
   <rule id="100030" level="0">
     <if_sid>550,553,554,594,598</if_sid>
     <list field="file" lookup="match_key">etc/lists/kriptome-fim-whitelist</list>
-    <description>Kriptome: FIM en path whitelisted ($(file)) — silenciado</description>
+    <description>Kriptome: FIM en path whitelisted GLOBALMENTE ($(file)) — silenciado para todos los tenants de este Manager</description>
     <group>syscheck,kriptome_silenced,</group>
   </rule>
 

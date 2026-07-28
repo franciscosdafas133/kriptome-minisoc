@@ -2,13 +2,26 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://kriptome.internal/specifications/procedure.schema.json",
   "title": "Procedure",
-  "description": "Procedimiento autorizado para un case_type. Es la fuente de verdad de las acciones que se comunican al cliente (ver action_plan en client_notification.schema.json): la IA puede mejorar la redacción de estas acciones, pero NUNCA puede inventar una acción que no esté en un Procedure aprobado (approved_by/approved_at/status). Un caso sin procedimiento autorizado va a cola humana, no se comunica con acciones improvisadas (ver DOCUMENTOS/04_MANUAL_DE_USUARIO.docx §A.3).",
+  "description": "Procedimiento autorizado para un case_type. Es la fuente de verdad de las acciones que se comunican al cliente (ver action_plan en client_notification.schema.json): la IA puede mejorar la redacción de estas acciones, pero NUNCA puede inventar una acción que no esté en un Procedure aprobado (approved_by/approved_at/status). Un caso sin procedimiento autorizado va a cola humana, no se comunica con acciones improvisadas (ver DOCUMENTOS/04_MANUAL_DE_USUARIO.docx §A.3). NOTA DE NOMBRES (v1.3.1, Fase 19): title/owner/applicable_conditions se agregaron como campos nuevos genuinos; approval_status/forbidden_actions/required_evidence/client_actions/kriptome_actions/version son EQUIVALENTES de status/do_not_do/evidence_to_preserve/customer_actions/internal_actions/procedure_version respectivamente (nombres usados en discusiones de arquitectura mas genéricas) -- se aceptan ambos nombres para no invalidar los 5 procedures YAML ya escritos con los nombres originales; ver 'equivalencias' en cada propiedad.",
   "type": "object",
   "additionalProperties": false,
-  "required": ["procedure_id", "procedure_version", "case_type", "customer_actions", "do_not_do", "human_review_required", "status"],
+  "required": ["procedure_id", "procedure_version", "title", "case_type", "customer_actions", "do_not_do", "human_review_required", "status", "owner"],
   "properties": {
     "procedure_id": { "type": "string" },
-    "procedure_version": { "type": "string" },
+    "procedure_version": { "type": "string", "description": "Equivalente: 'version' en nomenclatura genérica de arquitectura. No se duplica como dos propiedades -- este es el único nombre de campo." },
+    "title": {
+      "type": "string",
+      "description": "Nombre legible del procedimiento para humanos (p. ej. 'Login exitoso tras fuerza bruta -- respuesta autorizada'), distinto del procedure_id técnico."
+    },
+    "owner": {
+      "type": "string",
+      "description": "Rol o persona responsable de mantener este procedimiento actualizado y de su aprobación (p. ej. 'Kriptome SOC Lead'). No es el operador que ejecuta un caso puntual -- es quien responde por el contenido del procedimiento en el tiempo."
+    },
+    "applicable_conditions": {
+      "type": "array",
+      "items": { "type": "string" },
+      "description": "Condiciones observables (además de case_type + priority_levels) que deben cumplirse para que este procedimiento aplique a un caso concreto -- p. ej. 'kev_status=listed' para un procedimiento de vulnerabilidad más estricto. Vacío o ausente si el procedimiento aplica a todo caso del case_type/priority_levels indicados sin condición adicional."
+    },
     "case_type": {
       "type": "string",
       "description": "Debe existir en policies/case_types/*.yaml. Un procedure sin case_type asociado no es válido."
@@ -21,20 +34,38 @@
     "customer_actions": {
       "type": "array",
       "items": { "type": "string" },
-      "description": "Catálogo autorizado de acciones que se le pueden pedir al cliente para este procedimiento. client_notification.action_plan.customer_actions debe ser un subconjunto de esta lista."
+      "description": "Catálogo autorizado de acciones que se le pueden pedir al cliente para este procedimiento. client_notification.action_plan.customer_actions debe ser un subconjunto de esta lista. Equivalente: 'client_actions' en nomenclatura genérica de arquitectura -- mismo campo, no duplicado."
     },
     "internal_actions": {
       "type": "array",
       "items": { "type": "string" },
-      "description": "Acciones que ejecuta el operador/analista de Kriptome (no el cliente) -- p. ej. 'bloquear IP en el firewall gestionado', 'aislar el equipo'. Sujetas a out_of_band_confirmation_required en client_notification.schema.json cuando son sensibles."
+      "description": "Acciones que ejecuta el operador/analista de Kriptome (no el cliente) -- p. ej. 'bloquear IP en el firewall gestionado', 'aislar el equipo'. Sujetas a out_of_band_confirmation_required en client_notification.schema.json cuando son sensibles. Equivalente: 'kriptome_actions' en nomenclatura genérica de arquitectura -- mismo campo, no duplicado."
     },
     "do_not_do": {
       "type": "array",
-      "items": { "type": "string" }
+      "items": { "type": "string" },
+      "description": "Prohibiciones GENÉRICAS aplicables sin condición (deben ser pocas y justificadas). Reglas universales sin contexto (p. ej. 'nunca cerrar la sesión', 'siempre aislar') están PROHIBIDAS aquí -- una acción que depende de una circunstancia real (¿hay una sesión activa hostil? ¿el cliente puede aislar el equipo por sí mismo?) debe ir en decision_points, no en esta lista plana. Equivalente: 'forbidden_actions' en nomenclatura genérica de arquitectura -- mismo campo, no duplicado."
+    },
+    "decision_points": {
+      "type": "object",
+      "description": "Acciones CONDICIONALES: la respuesta correcta depende de una circunstancia observable del incidente, no es universal. Reemplaza reglas absolutas del tipo 'nunca cerrar la sesión' o 'siempre bloquear' -- esas prohibiciones sin contexto pueden ser operativamente riesgosas (p. ej. 'nunca cerrar la sesión' impediría cortar una sesión hostil activa cuando SÍ hace falta cortarla).",
+      "additionalProperties": {
+        "type": "object",
+        "description": "Cada clave de nivel superior es el nombre de la condición evaluada (p. ej. 'active_session_detected'). El campo 'description' (opcional) explica la condición en texto; el resto de claves mapea los posibles resultados de esa condición a las acciones correspondientes.",
+        "properties": {
+          "description": { "type": "string" }
+        },
+        "additionalProperties": {
+          "type": "array",
+          "items": { "type": "string" },
+          "description": "Lista de acciones a tomar cuando la condición tiene este valor."
+        }
+      }
     },
     "evidence_to_preserve": {
       "type": "array",
-      "items": { "type": "string" }
+      "items": { "type": "string" },
+      "description": "Equivalente: 'required_evidence' en nomenclatura genérica de arquitectura -- mismo campo, no duplicado."
     },
     "recommended_deadline": {
       "type": ["string", "null"],
@@ -58,7 +89,7 @@
     "status": {
       "type": "string",
       "enum": ["draft", "approved", "deprecated"],
-      "description": "'draft' = no debe usarse todavía para comunicar al cliente. 'approved' = válido para producción. 'deprecated' = ya no se usa, se conserva por trazabilidad histórica de casos antiguos."
+      "description": "'draft' = no debe usarse todavía para comunicar al cliente. 'approved' = válido para producción. 'deprecated' = ya no se usa, se conserva por trazabilidad histórica de casos antiguos. Equivalente: 'approval_status' en nomenclatura genérica de arquitectura -- mismo campo, no duplicado."
     }
   }
 }

@@ -1,0 +1,53 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://kriptome.internal/specifications/tenant_asset_assignment.schema.json",
+  "title": "TenantAssetAssignment",
+  "description": "Vínculo formal entre un agente Wazuh, el activo que representa, y el tenant al que pertenece. Es el registro que specifications/tenant_resolution.md llama 'asset registry' -- la fuente de verdad que el backend debe consultar para verificar que agent.labels.client_code coincide con la asignación real, antes de aceptar un evento como válido para un tenant. Contrato de datos, NO implementado. IDENTIDAD (v1.3.1): tenant_id/asset_id son las claves técnicas internas; client_code/asset_code son los códigos legibles observados en las labels del agente (ver specifications/tenant_identifier_migration.md).",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["tenant_id", "asset_id", "agent_id", "wazuh_group", "assignment_status", "assigned_at"],
+  "properties": {
+    "tenant_id": { "type": "string", "minLength": 1, "description": "Clave técnica interna del tenant (ver specifications/tenant.schema.json)." },
+    "asset_id": { "type": "string", "minLength": 1, "description": "Clave técnica interna del activo (ver specifications/asset_context.schema.json)." },
+    "client_code": {
+      "type": ["string", "null"],
+      "pattern": "^[A-Z0-9][A-Z0-9_-]{2,31}$",
+      "description": "Código legible del cliente esperado para este agente (debe coincidir con agent.labels.client_code observado, ver campo observed_labels). Null solo antes de la primera verificación."
+    },
+    "asset_code": {
+      "type": ["string", "null"],
+      "pattern": "^[A-Z0-9][A-Z0-9_-]{2,31}$",
+      "description": "Código legible del activo esperado (debe coincidir con agent.labels.asset_code observado)."
+    },
+    "agent_id": {
+      "type": "string",
+      "description": "agent.id de Wazuh (identificador técnico del agente, siempre presente y puesto por Wazuh -- ver specifications/tenant_resolution.md §1)."
+    },
+    "wazuh_group": {
+      "type": "string",
+      "description": "Grupo Wazuh al que pertenece el agente en el Manager (p. ej. 'TENANT-CLI-001', ver docs/architecture/WAZUH_GROUP_PRECEDENCE.md). Es la 'asignación operativa en el Manager' -- fuente de verdad distinta del label auto-reportado por el agente."
+    },
+    "observed_labels": {
+      "type": "object",
+      "description": "Copia de las labels OPERATIVAS relevantes del agente (agent.labels.client_code, agent.labels.asset_code, agent.labels.criticality_code, agent.labels.environment_code, agent.labels.site_code) al momento de la verificación, para poder auditar después si hubo una inconsistencia entre lo declarado por el agente y este registro. Nunca contiene PII (ver specifications/wazuh_alert_field_paths.md) -- solo códigos operativos, nunca nombres, correos o razón social.",
+      "additionalProperties": { "type": "string" }
+    },
+    "assignment_status": {
+      "type": "string",
+      "enum": ["pending_verification", "verified", "inconsistent", "quarantined", "retired"],
+      "description": "'verified' es el único estado en el que un evento de este agente debe procesarse con normalidad. 'inconsistent'/'quarantined' disparan el flujo de cuarentena de specifications/tenant_resolution.md. 'retired' es para agentes dados de baja (el activo ya no pertenece operativamente al tenant, pero se conserva el registro histórico)."
+    },
+    "assigned_at": { "type": "string", "format": "date-time" },
+    "verified_at": {
+      "type": ["string", "null"],
+      "format": "date-time",
+      "description": "Cuándo se verificó por última vez que wazuh_group y agent.labels.client_id coinciden. Null si nunca se ha verificado (asignación recién creada)."
+    },
+    "verified_by": {
+      "type": ["string", "null"],
+      "description": "Quién o qué proceso realizó la verificación (persona u operación automatizada). Null si verified_at es null."
+    }
+  },
+
+  "$comment": "REGLA DE INTEGRIDAD: un asset_id pertenece a UN SOLO tenant activo. Esto NO se expresa como una restricción de JSON Schema sobre un objeto individual (JSON Schema no puede validar unicidad entre instancias) -- es una regla de integridad que el futuro backend debe aplicar sobre la COLECCIÓN de asignaciones: antes de crear una nueva asignación con assignment_status='verified' para un asset_id dado, debe verificarse que no exista ya otra asignación 'verified' para ese mismo asset_id con un tenant_id distinto. Si existe, la nueva asignación debe quedar en 'inconsistent', no reemplazar silenciosamente la anterior."
+}

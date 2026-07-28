@@ -1,0 +1,112 @@
+# risk_policy_v1
+# Política determinística de riesgo (v1.3.1, Fase 18). CONTRATO DE DECISION,
+# NO IMPLEMENTADO -- no existe hoy un motor de riesgo corriendo este calculo.
+# Ver specifications/risk_result.schema.json (contrato de salida) y
+# docs/architecture/ARCHITECTURE_CANONICAL.md ("la IA nunca es fuente de
+# verdad del... procedimiento, estado o accion" -- el riesgo tampoco: esta
+# policy es deterministica, calculada por codigo de negocio, nunca por IA).
+#
+# PRINCIPIO: priority_level NUNCA es una copia de rule_level de Wazuh (ver
+# risk_result.schema.json). rule_level mide severidad de UN evento puntual
+# segun el fabricante de la regla; priority_level es una decision de negocio
+# de Kriptome que combina el evento con contexto (activo, evidencia,
+# alcance, historial) que Wazuh no conoce.
+
+risk_policy_version: v1
+
+# -----------------------------------------------------------------------
+# Factores de entrada (ver specifications/risk_result.schema.json,
+# risk_factors[].factor -- catalogo cerrado). Cada factor tiene una escala
+# fija y una fuente de datos explicita; ninguno se infiere de texto libre.
+# -----------------------------------------------------------------------
+factors:
+
+  - factor: technical_severity
+    source: "normalized_event.rule_level (0-16, ver specifications/normalized_event.schema.json)"
+    scale:
+      - { range: "0-4",  weight: low }
+      - { range: "5-9",  weight: medium }
+      - { range: "10-12", weight: high }
+      - { range: "13-16", weight: critical }
+    note: "Insumo, NO el resultado final -- ver principio arriba."
+
+  - factor: asset_criticality
+    source: "specifications/asset_context.schema.json campo criticality"
+    scale: ["low", "medium", "high", "critical"]
+    note: "Un mismo rule_level en un activo critical pesa mas que en uno low."
+
+  - factor: exposure
+    source: "specifications/asset_context.schema.json (environment_type/site_type) + enrichment_result.schema.json (ip_reputation cuando aplica a origen externo)"
+    scale: ["internal_only", "internal_exposed", "internet_facing"]
+    note: "Un activo internet_facing con hallazgo tecnico igual sube de nivel frente al mismo hallazgo en un activo interno aislado."
+
+  - factor: evidence_strength
+    source: "specifications/auth_evidence.schema.json (matching_user_verified, successful_login_count) o campos equivalentes de otras familias"
+    scale: ["circumstantial", "corroborated", "confirmed"]
+    note: "p.ej. exito de login tras brute force CON matching_user_verified=true es 'confirmed'; sin verificar el usuario coincidente es 'corroborated'."
+
+  - factor: known_exploitation
+    source: "specifications/enrichment_result.schema.json campo kev_status"
+    scale: ["not_listed", "no_cve", "stale_catalog", "source_error", "listed"]
+    note: "kev_status=listed es el UNICO valor que sube este factor a su maximo -- ver policies/case_types/VULNERABILITY.yaml. Los demas valores (incluido source_error) NUNCA se tratan como listed por defecto (ver enrichment_result.schema.json allOf)."
+
+  - factor: successful_access
+    source: "case_type especifico (p.ej. AUTH_BRUTEFORCE_SUCCESS) o material_changes del caso"
+    scale: [false, true]
+    note: "Distingue un intento/hallazgo de un acceso efectivamente logrado -- el segundo siempre pesa mas."
+
+  - factor: scope
+    source: "specifications/campaign_correlation.schema.json (existencia de una correlacion activa para este caso)"
+    scale: ["single_asset", "multi_asset_same_tenant"]
+    note: "NUNCA cruza tenant_id (ver campaign_correlation.schema.json never_correlates_across). Un caso dentro de una campaign_correlation activa sube de scope aunque su propio fingerprint no haya cambiado."
+
+  - factor: historical_context
+    source: "case_summary.schema.json / historial de casos cerrados del mismo asset_id+case_type"
+    scale: ["first_occurrence", "recurrent"]
+    note: "Recurrencia real de casos YA CERRADOS del mismo fingerprint_fields (no repeticiones dentro de un mismo caso abierto, eso ya lo cuenta event_count) -- p.ej. tercer caso FIM_CRITICAL_PATH cerrado como false_positive en 30 dias amerita revision distinta a la primera ocurrencia."
+
+  - factor: business_impact
+    source: "specifications/asset_context.schema.json campo business_service (texto/categoria de negocio asociado al activo, cuando esta poblado)"
+    scale: ["undetermined", "low_impact_service", "high_impact_service"]
+    note: "'undetermined' es el valor por defecto legitimo cuando el CMDB no tiene ese dato para el activo -- NO se asume high_impact_service por ausencia de dato, ni tampoco low_impact_service; undetermined no baja ni sube el nivel, solo se registra como limitacion en risk_factors[].explanation."
+
+# -----------------------------------------------------------------------
+# Combinacion determinista -> priority_level (specifications/risk_result.schema.json)
+# Regla de combinacion: MAXIMO de los niveles individuales (no promedio) --
+# un solo factor en 'critical' basta para escalar el caso, consistente con
+# el principio doc 03 "la IA no descarta / un caso critico siempre revision
+# humana" aplicado tambien al calculo deterministico de riesgo.
+# -----------------------------------------------------------------------
+combination_rule: "priority_level = max(nivel individual de cada factor aplicable al case_type), nunca un promedio ni una suma ponderada -- un factor en nivel maximo satura el resultado."
+
+level_mapping:
+  - internal_level: low
+    priority_level: informativo
+  - internal_level: medium
+    priority_level: atencion
+  - internal_level: high
+    priority_level: urgente
+  - internal_level: critical
+    priority_level: critico
+
+escalation_overrides:
+  - condition: "known_exploitation == listed"
+    forces_minimum: urgente
+    note: "ver policies/case_types/VULNERABILITY.yaml -- un CVE en el catalogo CISA KEV nunca queda en informativo/atencion, sin importar el resto de factores."
+  - condition: "successful_access == true"
+    forces_minimum: urgente
+    note: "un acceso efectivamente logrado (no solo intentado) nunca queda por debajo de urgente."
+  - condition: "scope == multi_asset_same_tenant"
+    forces_human_review: true
+    note: "no cambia priority_level por si solo, pero fuerza human_review_required=true (ver specifications/case.schema.json) -- coherente con el patron ya aplicado en policies/case_types/AGENT_HEALTH.yaml para multi_agent_outage."
+
+# -----------------------------------------------------------------------
+# Limites explicitos (que esta policy NO decide)
+# -----------------------------------------------------------------------
+known_limitations:
+  - "Esta policy NO asigna tenant, NO abre ni cierra casos, NO decide procedimiento ni redaccion -- solo produce priority_level + risk_factors auditable (specifications/risk_result.schema.json). Esas otras decisiones son de policies/case_types/*.yaml y policies/case_state_machine.yaml."
+  - "risk_score numerico (0-100) permanece null hasta que exista un modelo real calibrado -- esta version v1 solo produce el mapeo categorico low/medium/high/critical -> priority_level, no un score continuo (ver risk_result.schema.json campo risk_score)."
+  - "Los rangos de technical_severity (0-4/5-9/10-12/13-16) son un punto de partida razonable, no calibrados contra datos reales de produccion -- requieren revision cuando existan casos VALIDADO-PILOTO suficientes."
+  - "'historical_context=recurrent' requiere una consulta de casos cerrados historicos que hoy no tiene una interfaz de consulta definida -- se documenta el campo como parte del contrato, la consulta concreta queda pendiente de diseño de implementacion."
+
+policy_validation_status: DISEÑADO

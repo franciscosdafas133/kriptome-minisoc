@@ -36,7 +36,7 @@ Vuln,23503,CVE Active severity Low (lvl5),DIGEST,-,-,-,client+asset+VULN+cve,-,n
 Vuln,23504,CVE Active Medium/Untriaged (lvl7),DIGEST,-,-,-,client+asset+VULN+cve,-,no,digest,keep
 Vuln,23505,CVE Active High (lvl10),CANDIDATE,-,-,-,client+asset+VULN+cve,nuevo CVE en asset critico,al crear caso,digest priorizado (NO inmediata por si sola),keep; NO tratar lvl10 como incidente activo
 Vuln,23506,CVE Active Critical (lvl13),CANDIDATE,-,-,-,client+asset+VULN+cve,-,al crear caso,digest priorizado + revision (NO despertar salvo KEV),RETUNE routing: lvl13 CVE != intrusion activa
-Vuln,100040,CVE en CISA KEV (lvl13),CRITICAL,-,-,list kriptome-cisa-kev,client+asset+VULN_KEV+cve,asset ahora critico,al crear caso,inmediata + humano,CUSTOM fix (field cisa_kev no existia en tiempo de regla)
+Vuln,100040,CVE en CISA KEV (lvl13) [DESCARTADA-PARA-PRODUCCION v1.3.1: ver policies/case_types/VULNERABILITY.yaml],EXPERIMENTAL,-,-,list kriptome-cisa-kev,client+asset+VULN+cve (MISMO fingerprint que 23504-23506; v1.3.1 corrige inconsistencia previa VULN_KEV+cve),asset ahora critico (via enriquecimiento KEV en la App; no via esta regla),al crear caso,inmediata + humano (solo si kev_status=listed),CUSTOM historica; funcion cubierta por enriquecimiento App sobre 23501/23504/23505/23506
 Vuln,23502/23507,CVE resuelto / cleared (lvl3),CONTEXT,-,-,-,cierra caso VULN,remediado,no,no (cierre),keep; usar para cerrar casos
 AV/EDR,87105,VirusTotal: N engines detectaron archivo (lvl12),CRITICAL,-,-,integracion VT,client+asset+MALWARE_AV+sha256,ejecucion,al crear caso,inmediata + humano,keep (doc citaba 87104 = resultado limpio; ERROR)
 AV/EDR,62102,Windows Defender error event (lvl5),CONTEXT,-,-,alimenta 62105,-,-,no,digest,keep (doc decia 87700; rango ERROR)

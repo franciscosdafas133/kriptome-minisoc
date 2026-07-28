@@ -1,0 +1,63 @@
+# PROC-VULN-KEV-MC-001
+# Procedimiento especifico para el MATERIAL_CHANGE "kev_status pasa a
+# 'listed'" sobre un caso VULNERABILITY ya abierto (ver
+# policies/case_types/VULNERABILITY.yaml, material_changes -- "MISMO CASO,
+# no uno nuevo"). Distinto de PROC-VULN-001 (procedimiento general del
+# case_type completo, cubre generic/kev/ransomware_related/unsupported_product
+# de una vez via decision_points.vulnerability_classification): este
+# procedimiento sexto (v1.3.1, Fase 19) documenta especificamente la
+# COMUNICACION DE ACTUALIZACION cuando un caso YA COMUNICADO como generico
+# escala a KEV -- no es un caso nuevo, es una actualizacion de un caso
+# existente, con su propio tono y contenido de mensaje (ver
+# specifications/client_notification.schema.json message_type=material_change_update).
+# ESTADO: draft -- NO puede usarse para comunicar al cliente hasta que un
+# humano lo apruebe (ver procedures/README.md).
+
+procedure_id: PROC-VULN-KEV-MC-001
+procedure_version: "1"
+title: "Escalada a CISA KEV de una vulnerabilidad ya comunicada -- actualizacion autorizada"
+owner: "Kriptome SOC Lead"
+case_type: VULNERABILITY
+applicable_conditions:
+  - "El caso VULNERABILITY ya existia y ya fue comunicado con vulnerability_classification=generic"
+  - "kev_status pasa de not_listed/no_cve/stale_catalog a listed en un enriquecimiento posterior (ver policies/case_types/VULNERABILITY.yaml material_changes)"
+priority_levels:
+  - critico
+
+customer_actions:
+  - "Priorizar de inmediato la actualización del componente afectado, por encima de otras tareas de mantenimiento planificadas"
+  - "Confirmar con su proveedor de TI un plazo concreto de aplicación del parche"
+  - "Si la actualización no es posible de inmediato, coordinar con su proveedor una mitigación compensatoria temporal"
+
+internal_actions:
+  - "escalar a revisión humana inmediata (human_review_required=true, sin excepción)"
+  - "redactar la actualización dejando explícito que es EL MISMO caso ya conocido por el cliente, no un hallazgo nuevo (ver case.related_case_ids -- no aplica aquí porque no hay case_id nuevo, es el mismo)"
+  - "fijar un recommended_deadline propio de Kriptome, nunca copiar dueDate de CISA literalmente (ver policies/case_types/VULNERABILITY.yaml known_limitations)"
+
+do_not_do: []
+# Vacío intencionalmente: la única condición relevante ya está resuelta por
+# applicable_conditions (este procedimiento solo se activa ante la escalada
+# a KEV) -- no hay ramas condicionales adicionales que ameriten decision_points.
+
+decision_points:
+  already_notified_as_generic:
+    description: >-
+      ¿El cliente ya había recibido una comunicación previa de este mismo
+      caso como vulnerability_classification=generic? Determina si el
+      mensaje debe enmarcarse como "actualización" o como primera notificación.
+    "true":
+      - "usar message_type=material_change_update (specifications/client_notification.schema.json), referenciando explícitamente la comunicación anterior"
+      - "explicar en incident_facts que la escalada es un enriquecimiento externo nuevo (catálogo CISA KEV), no un cambio técnico detectado por Wazuh"
+    "false":
+      - "tratar como primera notificación del caso (usar PROC-VULN-001 en vez de este procedimiento -- si nunca se notificó como generic, no hay 'actualización' que comunicar)"
+
+evidence_to_preserve:
+  - "conservar la referencia del enrichment_result (kev_status, resolver_version, fecha de consulta) que originó la escalada, para auditoría de por qué cambió la prioridad"
+
+recommended_deadline: "PT72H"
+human_review_required: true
+out_of_band_confirmation_required: false
+
+approved_by: null
+approved_at: null
+status: draft

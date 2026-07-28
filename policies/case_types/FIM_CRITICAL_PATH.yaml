@@ -59,4 +59,15 @@ known_limitations:
   - "match_key de la whitelist (100030) es igualdad EXACTA -- no cubre directorios/regex; ruido de directorio se filtra en agent.conf, no aqui (ver REGLAS_TUNEADAS/agent-conf/kriptome-baseline_agent.conf)"
   - "Que una ruta sea 'critica' (para decidir routing urgente vs digest) es una clasificacion de la App/CMDB por asset, no un campo que Wazuh produzca -- este dato no viene en el evento normalizado"
 
+# Trazabilidad FIM -> Malware (Fase 12, ver policies/case_types/MALWARE_CONFIRMED.yaml
+# para la politica completa): si el hash del archivo modificado/agregado
+# coincide con la lista malicious-ioc, este caso NO cambia su case_type a
+# MALWARE_CONFIRMED silenciosamente -- se abre un caso MALWARE_CONFIRMED
+# NUEVO y AMBOS casos quedan enlazados via case.related_case_ids
+# (specifications/case.schema.json). El material_change correspondiente ya
+# esta declarado arriba: "el hash del archivo nuevo/modificado coincide con
+# la lista malicious-ioc (escalaria a MALWARE_CONFIRMED, no queda en
+# FIM_CRITICAL_PATH)".
+escalation_traceability_required: true
+
 policy_validation_status: DISEÑADO

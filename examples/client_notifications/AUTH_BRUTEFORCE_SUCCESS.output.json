@@ -1,5 +1,4 @@
 {
-  "_comment": "Ejemplo de SALIDA: instancia que cumple specifications/client_notification.schema.json, generada a partir de AUTH_BRUTEFORCE_SUCCESS.input.json. Ilustrativo, no producido por un sistema real (no existe backend implementado en este repo). Nótese cómo datos_principales respeta matching_user_verified=false: nunca dice 'intentos contra la cuenta administrador', dice 'intentos desde la misma dirección y luego un acceso exitoso con la cuenta administrador' (ver regla crítica de comunicación en specifications/auth_evidence.schema.json).",
   "case_id": "KRP-2026-000481",
   "tenant_id": "CLI-001",
   "message_type": "alerta_inicial",
@@ -16,26 +15,16 @@
     "datos_principales": "Detectamos 10 intentos de acceso fallidos desde una misma dirección de internet, y minutos después un acceso EXITOSO desde esa misma dirección usando la cuenta administrador. El equipo afectado es su Servidor de facturación, un activo crítico para su operación.",
     "que_debe_hacer_usted": "Cambie de inmediato la contraseña de la cuenta administrador desde otro equipo. Si esa misma contraseña se usa en otros servicios, cámbiela también ahí. Confirme si alguien de su equipo o su soporte de TI accedió legítimamente en ese horario.",
     "que_no_debe_hacer": "No apague el servidor: se pierde el rastro de lo que hizo el intruso después de entrar.",
-    "que_esta_haciendo_kriptome": "Estamos revisando qué hizo esa cuenta después de entrar. Con su autorización, podemos bloquear la dirección de origen.",
+    "que_esta_haciendo_kriptome": "Este caso quedó registrado y escalado para revisión humana. El equipo de Kriptome evaluará la evidencia disponible y se pondrá en contacto para coordinar los siguientes pasos.",
     "instrucciones_de_respuesta": "Responda este mismo correo (sin cambiar el asunto) indicando: si reconoce esta actividad, quién la realizó y por qué, qué acciones ya tomó usted, y si notó algo más fuera de lo normal en ese equipo.",
     "detalle_soporte_tecnico": "Regla Kriptome 100013 (login Windows exitoso tras brute force, correlación nativa 60204 por IP) · dirección de origen 198.51.100.23 · cuenta administrador · equipo AST-004 (srv-facturacion-01.cli001.local) · MITRE T1110/T1078 · caso KRP-2026-000481. Nota de evidencia: la correlación de los 10 intentos fallidos fue por misma IP (regla nativa 60204), no verificada evento-por-evento contra la cuenta administrador (matching_user_verified=false en auth_evidence) -- de ahí la redacción que separa el conteo de fallos (por IP) del acceso exitoso (por cuenta)."
   },
 
   "incident_facts": {
-    "asset_alias": "Servidor de facturación",
-    "hostname": "srv-facturacion-01.cli001.local",
-    "environment": "prod",
-    "business_service": "Facturación electrónica",
-    "criticality": "critical",
+    "asset_id": "AST-004",
     "target_user": "administrador",
     "source_ip": "198.51.100.23",
     "access_type": "acceso por red",
-    "workstation_name": "ATTACKER-PC",
-    "first_seen_at": "2026-07-14T15:10:15-05:00",
-    "last_seen_at": "2026-07-14T15:23:40-05:00",
-    "successful_login_at": "2026-07-14T15:23:40-05:00",
-    "failed_attempt_count": 10,
-    "successful_login_count": 1,
     "geo_country": null,
     "geo_city": null,
     "isp_or_asn": null,
@@ -64,8 +53,8 @@
       "Si la misma contraseña se usa en otros servicios, cambiarla también ahí",
       "Confirmar si alguien de su equipo o su soporte de TI accedió legítimamente en ese horario"
     ],
-    "do_not_do": ["No apague el servidor: se pierde la evidencia de lo que hizo el intruso"],
-    "evidence_to_preserve": ["no reiniciar el servidor", "no cerrar la sesión activa hasta revisarla"],
+    "do_not_do": [],
+    "evidence_to_preserve": ["no reiniciar el equipo hasta que el soporte técnico confirme haber revisado la sesión activa"],
     "recommended_deadline": null,
     "escalation_contact": "soporte@kriptome.pe · (01) 6XX XXXX"
   },

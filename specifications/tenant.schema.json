@@ -1,0 +1,82 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://kriptome.internal/specifications/tenant.schema.json",
+  "title": "Tenant",
+  "description": "Registro de negocio de un tenant (cliente de Kriptome). Es la fuente de verdad de negocio referida en specifications/tenant_resolution.md §'tenant registry' -- el tenant_id de un evento se resuelve contra este registro, no se acepta como autoridad un valor que venga del frontend. Contrato de datos, NO implementado: no existe hoy una tabla/registro de tenants funcionando. IDENTIDAD (v1.3.1, ver specifications/tenant_identifier_migration.md): tenant_id y client_code NO son sinónimos -- tenant_id es la clave técnica interna, inmutable, principal; client_code es el código legible/operativo (el que aparece en agent.labels.client_code, ver REGLAS_TUNEADAS/agent-conf/). Un tenant puede en teoría cambiar de client_code (p. ej. rebranding comercial) sin que cambie su tenant_id -- eso es precisamente lo que la separación permite y que un solo campo 'client_id' no podía expresar.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["tenant_id", "client_code", "tenant_name", "tenant_type", "status", "onboarding_status", "primary_contact", "timezone", "notification_language", "created_at", "updated_at"],
+  "properties": {
+    "tenant_id": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Identificador TÉCNICO interno, inmutable, principal. No se impone un formato UUID todavía -- el formato definitivo (UUID vs. secuencial vs. otro) queda pendiente de un ADR formal (ver docs/adr/) si el equipo decide fijarlo; hasta entonces, cualquier string no vacío es válido a nivel de schema."
+    },
+    "client_code": {
+      "type": "string",
+      "pattern": "^[A-Z0-9][A-Z0-9_-]{2,31}$",
+      "description": "Código legible y operativo del cliente, el que efectivamente viaja en agent.labels.client_code (ver REGLAS_TUNEADAS/agent-conf/CLI-001_agent.conf.example). Ejemplos: 'CLI-001', 'CEO-HOME', 'PILOT-02'. Es evidencia operacional para el Tenant Resolver (specifications/tenant_resolution.schema.json), no la clave primaria del registro -- la clave primaria es tenant_id."
+    },
+    "tenant_name": {
+      "type": "string",
+      "description": "Nombre del tenant. Para tenant_type='home' puede ser un nombre descriptivo no comercial, p. ej. 'Casa del CEO' -- no se asume que todo tenant tenga una razón social."
+    },
+    "tenant_type": {
+      "type": "string",
+      "enum": ["home", "small_business", "medium_business", "enterprise", "lab", "internal"],
+      "description": "'home' cubre el caso de un tenant residencial (p. ej. la casa de un responsable de la empresa piloto). 'internal' es para activos propios de Kriptome (entornos de prueba, no clientes reales)."
+    },
+    "status": {
+      "type": "string",
+      "enum": ["draft", "onboarding", "active", "suspended", "offboarding", "closed"],
+      "description": "Estado del ciclo de vida comercial del tenant. Solo un tenant en 'active' debe generar notificaciones reales al cliente."
+    },
+    "service_plan": {
+      "type": ["string", "null"],
+      "description": "Plan de servicio contratado, si aplica (texto libre -- este repo no define un catálogo de planes)."
+    },
+    "onboarding_status": {
+      "type": "string",
+      "enum": ["not_started", "inventory_pending", "agents_pending", "labels_pending", "ingestion_pending", "access_pending", "verification_pending", "completed"],
+      "description": "Progreso del proceso de alta técnica (ver DOCUMENTOS/03_FLUJOS_OPERATIVOS.docx §5 para el checklist de onboarding de referencia, e implementation/multi_tenant_two_tenant_plan.md para el plan de los dos tenants piloto)."
+    },
+    "primary_contact": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["name", "contact_method"],
+      "properties": {
+        "name": { "type": "string" },
+        "contact_method": { "type": "string", "description": "Correo o teléfono del contacto primario." }
+      }
+    },
+    "secondary_contact": {
+      "type": ["object", "null"],
+      "additionalProperties": false,
+      "properties": {
+        "name": { "type": "string" },
+        "contact_method": { "type": "string" }
+      },
+      "description": "Contacto secundario -- obligatorio en la práctica para el canal alterno de comunicación en caso de correo comprometido (ver DOCUMENTOS/07_COMUNICACION_CON_EL_CLIENTE.docx §B.10, plantilla 5.10), aunque el schema lo deja opcional para no bloquear un onboarding parcial."
+    },
+    "allowed_asset_count": {
+      "type": ["integer", "null"],
+      "minimum": 0,
+      "description": "Límite contractual de activos permitidos para este tenant. Null si no hay límite definido. Usado para detectar inconsistencias en tenant_asset_assignment.schema.json (más asignaciones activas que las permitidas)."
+    },
+    "timezone": {
+      "type": "string",
+      "description": "Zona horaria del tenant (p. ej. 'America/Lima'), para calcular quiet hours y horarios de notificación."
+    },
+    "notification_language": {
+      "type": "string",
+      "const": "es-PE",
+      "description": "Debe coincidir con client_notification.schema.json language. Un solo valor soportado hoy."
+    },
+    "support_hours": {
+      "type": ["string", "null"],
+      "description": "Horario de soporte acordado con el tenant (texto libre, p. ej. 'Lunes a viernes 8:00-18:00'). Null si no se ha definido (tenants tipo 'home' pueden no requerir horario de soporte formal)."
+    },
+    "created_at": { "type": "string", "format": "date-time" },
+    "updated_at": { "type": "string", "format": "date-time" }
+  }
+}

@@ -2,41 +2,67 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://kriptome.internal/specifications/case.schema.json",
   "title": "Case",
-  "description": "Un caso Kriptome: la unidad de trabajo del sistema (doc 03: 'ALERTA != CASO'). Se abre por case_fingerprint (client_id + asset_id + case_type + campo variable de la familia, ver routing_matrix.csv columna 'Fingerprint'). Contrato de datos -- NO implica un motor de casos funcionando; el motor real (Kriptome App) está fuera de alcance de este repo.",
+  "description": "Un caso Kriptome: la unidad de trabajo del sistema (doc 03: 'ALERTA != CASO'). Se abre por case_fingerprint (tenant_id + asset_id + case_type + campo variable de la familia, ver routing_matrix.csv columna 'Fingerprint'). Contrato de datos -- NO implica un motor de casos funcionando; el motor real (Kriptome App / motor de casos, ver docs/architecture/ARCHITECTURE_CANONICAL.md) está fuera de alcance de este repo. IDENTIDAD (v1.3.1): usa tenant_id (clave técnica) -- ver specifications/tenant_identifier_migration.md. ESTADOS (v1.3.1, corrección P0): status usa ÚNICAMENTE los valores de policies/case_state_machine.yaml -- esa policy es la fuente de verdad única de estados y transiciones; este schema no vuelve a definir el enum por su cuenta.",
   "type": "object",
   "additionalProperties": false,
-  "required": ["case_id", "tenant_id", "asset_id", "case_type", "status", "opened_at", "event_count", "fingerprint"],
+  "required": ["case_id", "tenant_id", "asset_id", "case_type", "status", "opened_at", "event_count", "fingerprint", "fingerprint_version"],
   "properties": {
     "case_id": {
       "type": "string",
       "pattern": "^KRP-[0-9]{4}-[0-9]{6}$",
-      "description": "Formato usado en las plantillas de correo (DOCUMENTOS/07_COMUNICACION_CON_EL_CLIENTE.docx), p. ej. KRP-2026-000481."
+      "description": "Formato usado en las plantillas de correo (DOCUMENTOS/07_COMUNICACION_CON_EL_CLIENTE.docx -- histórico solo en el mecanismo A/B/C, vigente en el formato de identificador), p. ej. KRP-2026-000481."
     },
-    "tenant_id": { "type": "string" },
+    "tenant_id": { "type": "string", "minLength": 1 },
     "asset_id": { "type": "string" },
     "case_type": {
       "type": "string",
-      "description": "Debe existir como case_type en policies/case_types/*.yaml y en routing_matrix.csv. Un case_type sin política asociada no debería poder abrir un caso -- ver case_type_policy.example.yaml."
+      "description": "Debe existir como case_type en policies/case_types/*.yaml y en routing_matrix.csv (generado desde las policies, ver scripts/generate_routing_matrix.py). Un case_type sin política asociada no debería poder abrir un caso."
     },
     "fingerprint": {
       "type": "string",
-      "description": "Valor concreto del case_fingerprint (client_id+asset_id+case_type+campo variable) que agrupó este caso. No incluye timestamp ni contadores (doc 02 §6: 'Nunca incluyen timestamp ni contadores')."
+      "description": "Valor concreto del case_fingerprint (tenant_id+asset_id+case_type+campo variable) que agrupó este caso. No incluye timestamp ni contadores (doc 02 §6: 'Nunca incluyen timestamp ni contadores')."
+    },
+    "fingerprint_version": {
+      "type": "string",
+      "description": "Versión del algoritmo/campos usados para calcular fingerprint (ver docs/architecture/CASE_ENGINE_CONCURRENCY.md, campo fingerprint_hash/fingerprint_version). Permite cambiar la definición de fingerprint de un case_type sin invalidar silenciosamente los casos ya abiertos con la versión anterior."
     },
     "status": {
       "type": "string",
-      "enum": ["open", "pending_human_review", "pending_client_response", "closed_resolved", "closed_false_positive", "closed_auto"]
+      "enum": ["new", "triaging", "observing", "pending_human", "ready_to_communicate", "waiting_client", "monitoring", "resolved", "closed"],
+      "description": "ÚNICAMENTE estos 9 valores, definidos en policies/case_state_machine.yaml -- esa policy es la fuente de verdad de estados y transiciones (from/to/allowed_actors/required_conditions/audit_event). No usar valores de versiones previas de este schema (open/pending_human_review/pending_client_response/closed_resolved/closed_false_positive/closed_auto/reopened) -- ver specifications/tenant_identifier_migration.md y el propio case_state_machine.yaml para el detalle de la corrección."
+    },
+    "resolution_type": {
+      "type": ["string", "null"],
+      "enum": ["resolved", "false_positive", "expected_activity", "auto_recovered", "no_response", "duplicate", null],
+      "description": "Motivo de cierre, ATRIBUTO SEPARADO del estado (v1.3.1: antes se mezclaba en el propio nombre del estado, p. ej. 'closed_false_positive'). Obligatorio cuando status='closed' (ver required condicional más abajo); null en cualquier otro estado."
     },
     "priority_level": {
       "type": ["string", "null"],
       "enum": ["informativo", "atencion", "urgente", "critico", null],
-      "description": "Nivel visible al cliente (DOCUMENTOS/07 §1). Null antes de la primera clasificación."
+      "description": "Nivel visible al cliente. Null antes de la primera clasificación. Calculado por policies/risk/risk_policy_v1.yaml, NUNCA copiado directamente de rule_level de Wazuh (ver ese archivo)."
     },
     "opened_at": { "type": "string", "format": "date-time" },
     "closed_at": { "type": ["string", "null"], "format": "date-time" },
+
+    "reopened_at": {
+      "type": ["string", "null"],
+      "format": "date-time",
+      "description": "Poblado únicamente si el caso pasó por la transición closed -> triaging (ver policies/case_state_machine.yaml). Null si el caso nunca se reabrió."
+    },
+    "reopen_reason": {
+      "type": ["string", "null"],
+      "description": "Motivo de la reapertura más reciente (texto trazable, p. ej. 'nuevo evento con el mismo fingerprint dentro de la ventana de reapertura'). Null si nunca se reabrió."
+    },
+    "previous_closed_at": {
+      "type": ["string", "null"],
+      "format": "date-time",
+      "description": "closed_at que tenía el caso justo antes de la reapertura más reciente. Permite reconstruir el historial de cierres/reaperturas sin necesitar una tabla de eventos separada para ese propósito. Null si nunca se reabrió."
+    },
+
     "event_count": {
       "type": "integer",
       "minimum": 1,
-      "description": "Contador de eventos agrupados en este caso (event_count++ en repeticiones sin cambio material, doc 03 nivel de control 5)."
+      "description": "Contador de eventos agrupados en este caso (event_count++ en repeticiones sin cambio material, doc 03 nivel de control 5). NO es sinónimo de failed_attempt_count ni de ningún contador específico de familia -- ver specifications/case_summary.schema.json."
     },
     "material_changes": {
       "type": "array",
@@ -56,13 +82,26 @@
     },
     "ai_input_hash": {
       "type": ["string", "null"],
-      "description": "Hash del contexto mínimo enviado a la IA (doc 02 §8: case_id, tipo, event_count, material_change, asset_alias, criticality, resumen_IOC, procedure_id, pasos_permitidos, recipient_level). Reutilizar salida si el hash no cambió -- evita re-pagar la IA en repeticiones."
+      "description": "Hash del contexto mínimo enviado a la IA. Ver docs/architecture/AI_SCOPE_AND_GUARDRAILS.md §4 (v1.3.1) para la composición formal exacta (case_material_version + risk_policy_version + procedure_id + procedure_version + notification_intent + recipient_profile_version + prompt_version) y specifications/procedure.schema.json / docs/architecture/ARCHITECTURE_CANONICAL.md ('la IA nunca es fuente de verdad') para el alcance exacto de lo que puede recibir. Reutilizar salida si el hash no cambió -- evita re-pagar la IA en repeticiones (una repetición no equivale a otra llamada de IA)."
+    },
+    "related_case_ids": {
+      "type": "array",
+      "items": { "type": "string", "pattern": "^KRP-[0-9]{4}-[0-9]{6}$" },
+      "description": "Casos de OTRO case_type relacionados por trazabilidad explícita (v1.3.1) -- p. ej. un caso FIM_CRITICAL_PATH que escaló a un MALWARE_CONFIRMED nuevo (ver policies/case_types/MALWARE_CONFIRMED.yaml, related_incident_policy). Distinto de campaign_correlation.related_case_ids (specifications/campaign_correlation.schema.json), que agrupa casos del MISMO case_type por un patrón común -- aquí se relacionan casos de case_type DISTINTO por una escalada real. Nunca implica que el case_type del caso original cambió."
     },
     "assigned_operator": { "type": ["string", "null"] },
     "notifications_sent": {
       "type": "array",
       "items": { "type": "string" },
-      "description": "Lista de message_key ya enviados para este caso (idempotencia, doc 03 nivel de control 7: 'mismo contexto -> no repagar IA; reintento de envío -> 0 correos duplicados')."
+      "description": "Lista de message_key ya enviados para este caso (idempotencia, doc 03 nivel de control 7: 'mismo contexto -> no repagar IA; reintento de envío -> 0 correos duplicados'). Una llamada de IA no equivale automáticamente a un correo -- este campo solo se puebla cuando el mensaje efectivamente salió por el Transactional Outbox (ver docs/architecture/AUDIT_AND_OUTBOX.md)."
     }
-  }
+  },
+
+  "allOf": [
+    {
+      "if": { "properties": { "status": { "const": "closed" } }, "required": ["status"] },
+      "then": { "required": ["resolution_type", "closed_at"] },
+      "else": { "properties": { "resolution_type": { "const": null } } }
+    }
+  ]
 }

@@ -1,6 +1,6 @@
 <!--
-Ejemplo ilustrativo, renderizado a partir de AUTH_BRUTEFORCE_SUCCESS.output.json.
-No es un correo real enviado -- este repo no implementa envío de correo (ver README.md).
+Ejemplo ILUSTRATIVO, renderizado a partir de AUTH_BRUTEFORCE_SUCCESS.output.json.
+No es un correo real enviado. Ver README.md de esta carpeta para el alcance completo.
 -->
 
 **Asunto:** [KRP-2026-000481] CRÍTICO — Entraron a su Servidor de facturación
@@ -24,7 +24,7 @@ Estimado(a) responsable:
 
 **Qué NO debe hacer:** No apague el servidor: se pierde el rastro de lo que hizo el intruso después de entrar.
 
-**Qué está haciendo Kriptome:** Estamos revisando qué hizo esa cuenta después de entrar. Con su autorización, podemos bloquear la dirección de origen.
+**Qué está haciendo Kriptome:** Este caso quedó registrado y escalado para revisión humana. El equipo de Kriptome evaluará la evidencia disponible y se pondrá en contacto para coordinar los siguientes pasos.
 
 **Cómo responder:** Responda este mismo correo (sin cambiar el asunto) indicando:
 - si reconoce esta actividad,
@@ -35,6 +35,6 @@ Estimado(a) responsable:
 ---
 
 Equipo Kriptome · Monitoreo de seguridad
-Este correo es sobre el caso KRP-2026-000481. Kriptome nunca le pedirá contraseñas, pagos ni instalar programas. Ante cualquier duda, llámenos al (01) 6XX XXXX.
+Este correo es sobre el caso KRP-2026-000481. Kriptome nunca le pedirá contraseñas, pagos ni instalar programas.
 
 **Detalle para su soporte técnico:** dirección de origen 198.51.100.23 · cuenta administrador · equipo AST-004 (srv-facturacion-01.cli001.local) · regla Kriptome 100013 · MITRE T1110/T1078 · caso KRP-2026-000481. *Nota de evidencia: el conteo de 10 intentos fallidos corresponde a la misma dirección IP, no verificado evento-por-evento contra la cuenta administrador — por eso el mensaje separa "intentos desde la misma dirección" del "acceso exitoso con la cuenta administrador".*

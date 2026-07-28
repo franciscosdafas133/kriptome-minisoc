@@ -17,9 +17,41 @@
    - Se añade el <list> de kriptome-fim-whitelist (usado por la regla activa
      100030). Ese archivo debe copiarse a etc/lists/ ANTES de reiniciar
      (ver GUIA_DE_DESPLIEGUE).
-   - rule_exclude por parque: SOLO tecnologias que el cliente NO usa. Se aplica
-     por deployment; si un cliente SI usa O365/Docker/etc, quita su linea.
    - El orden importa: primero decoders/rules oficiales, luego custom.
+
+  CORRECCION v1.3.1 (Fase 14: rule_exclude en un Manager COMPARTIDO):
+  ossec.conf y su bloque <ruleset> son GLOBALES a todo el Manager: en la
+  arquitectura multi-tenant de Kriptome, UN Manager atiende a VARIOS
+  tenants (ver docs/architecture/WAZUH_GROUP_PRECEDENCE.md). Si el tenant A
+  no usa AWS pero el tenant B SI lo usa, un <rule_exclude>0350-amazon_rules.xml</rule_exclude>
+  puesto "porque el tenant A no usa AWS" desactivaria la deteccion de AWS
+  para TODOS los tenants del Manager, incluido B. Por eso:
+
+  RULE_EXCLUDE SOLO ES VALIDO cuando la tecnologia esta ausente en TODO EL
+  PARQUE atendido por este Manager (ningun tenant de los que comparten este
+  Manager la usa). NUNCA se usa como personalizacion de un tenant
+  individual: ese es el error que tenian versiones previas de este
+  archivo (el ejemplo de comentario decia "p.ej. el cliente adopta AWS",
+  dando a entender una decision por-cliente en un Manager compartido).
+
+  Para personalizacion POR TENANT (no por Manager completo), las opciones
+  correctas son:
+    (a) habilitar/deshabilitar modulos o recoleccion a nivel de GRUPO Wazuh
+        del tenant (ver agent.conf del grupo, no ossec.conf del Manager);
+    (b) filtrar el ROUTING en la capa Kriptome (policies/case_types/*.yaml +
+        routing_matrix): una regla puede seguir disparando en Wazuh pero
+        el motor de casos decide no abrir caso ni notificar para ese tenant
+        si la tecnologia no aplica a su contrato;
+    (c) configurar la integracion especifica por AGENTE (p.ej. activar el
+        modulo AWS solo en los agentes del tenant que lo usa, no a nivel
+        global de decodificacion/reglas);
+    (d) una policy tenant-specific explicita, si el diseño de la Kriptome
+        App llega a soportarlo (fuera de alcance de este repo hoy).
+
+  Los <rule_exclude> que siguen abajo (AWS/GCP/Azure/Docker/O365/GitHub) se
+  mantienen SOLO como EJEMPLO de sintaxis: antes de aplicarlos a un
+  Manager real, confirmar que NINGUN tenant atendido por ese Manager usa
+  esa tecnologia. Si un solo tenant la usa, esa linea NO debe estar.
 
   NOTA v1.2.0 — kriptome-cisa-kev y la regla 100040:
   la regla 100040 (que consumia esta lista) se movio a
@@ -54,7 +86,9 @@
   <rule_dir>etc/rules</rule_dir>
 
   <!--
-    Exclusiones por parque (NO por gusto). Solo si el cliente no usa esa tech.
+    Exclusiones por PARQUE COMPLETO del Manager (v1.3.1: NO por cliente
+    individual; ver nota extensa arriba, "CORRECCION v1.3.1 Fase 14").
+    Solo si NINGUN tenant atendido por este Manager usa esa tecnologia.
     Verifica el nombre EXACTO del archivo en ruleset/rules/ antes de excluir.
     (En v4.14 los nombres cambian respecto al doc: p.ej. AWS = 0350-amazon_rules.xml,
      Azure = 0555-azure_rules.xml, Docker = 0455-docker_rules.xml / 0560-docker_integration_rules.xml,

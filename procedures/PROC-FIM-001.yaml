@@ -1,0 +1,44 @@
+# PROC-FIM-001
+# Procedimiento para FIM_CRITICAL_PATH (cambio de integridad en ruta sensible).
+# ESTADO: draft -- NO puede usarse para comunicar al cliente hasta que un
+# humano lo apruebe (ver procedures/README.md).
+
+procedure_id: PROC-FIM-001
+procedure_version: "1"
+title: "Cambio de integridad en ruta crítica -- respuesta autorizada"
+owner: "Kriptome SOC Lead"
+case_type: FIM_CRITICAL_PATH
+priority_levels:
+  - atencion
+  - urgente
+
+customer_actions:
+  - "Confirmar con su soporte de TI si el cambio detectado corresponde a una actualización o mantenimiento planificado"
+  - "Si el cambio no fue planificado, coordinar con su soporte de TI una revisión del equipo"
+
+internal_actions:
+  - "comparar el archivo/ruta modificado contra listas de referencia conocidas, si están disponibles"
+  - "escalar a revisión humana si el cambio no puede explicarse como mantenimiento"
+
+do_not_do: []
+
+decision_points:
+  change_explained_by_client:
+    description: "¿El cliente confirmó que el cambio corresponde a una actividad planificada y legítima?"
+    "true":
+      - "cerrar el caso como actividad legítima, registrando la explicación"
+      - "evaluar si corresponde una excepción temporal en la política de detección (no automática, requiere revisión)"
+    "false":
+      - "escalar a revisión humana"
+      - "recomendar al cliente coordinar con su soporte de TI una revisión más profunda del equipo"
+
+evidence_to_preserve:
+  - "conservar una copia o hash del archivo antes de cualquier modificación adicional, si es técnicamente posible para el cliente"
+
+recommended_deadline: null
+human_review_required: false
+out_of_band_confirmation_required: false
+
+approved_by: null
+approved_at: null
+status: draft

@@ -1,0 +1,92 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://kriptome.internal/specifications/inbound_message.schema.json",
+  "title": "InboundMessage",
+  "description": "Respuesta del cliente a una ClientNotification (specifications/client_notification.schema.json), recibida como texto libre por correo (ver ese schema: 'no se ofrece un menú de respuestas A/B/C'). CONTRATO DE DATOS, NO IMPLEMENTADO -- no existe hoy un Inbound Response Router funcionando (ver docs/architecture/ARCHITECTURE_CANONICAL.md). Ver docs/architecture/EMAIL_THREAD_SECURITY.md para las reglas de verificación de identidad/hilo que este objeto documenta como resultado.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["inbound_message_id", "case_id", "tenant_id", "received_at", "thread_verification_status", "sender_verification_status"],
+  "properties": {
+    "inbound_message_id": {
+      "type": "string",
+      "description": "Identificador propio de este mensaje entrante (no confundir con provider_thread_id, que identifica el HILO, no el mensaje individual)."
+    },
+    "case_id": {
+      "type": ["string", "null"],
+      "pattern": "^KRP-[0-9]{4}-[0-9]{6}$",
+      "description": "Caso al que este mensaje responde, resuelto a partir del hilo (ver provider_thread_id/in_reply_to/references), NUNCA de un texto libre tipo '[case_id]' escrito manualmente en el asunto -- un remitente hostil puede escribir cualquier case_id en un asunto. Null si el hilo no pudo resolverse a ningún caso (ver thread_verification_status)."
+    },
+    "tenant_id": {
+      "type": "string",
+      "description": "Tenant resuelto a partir del case_id ya resuelto (nunca aceptado del remitente ni de un campo editable del correo)."
+    },
+    "provider_thread_id": {
+      "type": ["string", "null"],
+      "description": "Identificador de hilo asignado por el proveedor de correo (p. ej. Message-ID raíz del hilo, o el thread-id propio de la API del proveedor si difiere de los headers RFC 5322). Autoridad PRIMARIA para asociar esta respuesta a la notificación original -- ver docs/architecture/EMAIL_THREAD_SECURITY.md."
+    },
+    "in_reply_to": {
+      "type": ["string", "null"],
+      "description": "Header In-Reply-To (RFC 5322) del mensaje entrante -- debe apuntar al Message-ID del correo de ClientNotification original."
+    },
+    "references": {
+      "type": "array",
+      "items": { "type": "string" },
+      "description": "Header References (RFC 5322), cadena completa de Message-IDs del hilo. Se usa como verificación SECUNDARIA/redundante junto con in_reply_to -- un hilo válido debe tener coherencia entre provider_thread_id, in_reply_to y references, no solo uno de los tres."
+    },
+    "reply_token": {
+      "type": ["string", "null"],
+      "description": "Token único embebido en el correo saliente original (p. ej. en una dirección de respuesta con alias case+token@dominio, o en un encabezado propio) para verificación adicional independiente de los headers estándar, que un remitente no puede falsificar sin conocerlo. Null si el mecanismo de token no está implementado para este envío (ver known_limitations)."
+    },
+    "from_address": {
+      "type": "string",
+      "description": "Dirección de correo del remitente tal como llegó (header From). EVIDENCIA, no autoridad -- ver sender_verification_status."
+    },
+    "sender_verification_status": {
+      "type": "string",
+      "enum": ["authorized_contact", "unregistered_sender", "domain_mismatch", "spoofing_suspected", "verification_pending"],
+      "description": "'authorized_contact' es el ÚNICO estado en el que la respuesta se procesa como entrada válida al flujo del caso. Cualquier otro valor implica revisión humana antes de tomar cualquier acción basada en el contenido del mensaje -- ver docs/architecture/EMAIL_THREAD_SECURITY.md."
+    },
+    "thread_verification_status": {
+      "type": "string",
+      "enum": ["verified", "partial_match", "no_match", "case_closed_reopened_thread", "ambiguous_multiple_cases"],
+      "description": "'verified' = provider_thread_id + in_reply_to + references coherentes entre sí y apuntando a un case_id existente. Cualquier otro valor bloquea la asociación automática al caso -- ver docs/architecture/EMAIL_THREAD_SECURITY.md."
+    },
+    "received_at": { "type": "string", "format": "date-time" },
+    "raw_body_reference": {
+      "type": "string",
+      "description": "Puntero al cuerpo completo del mensaje en el almacén correspondiente (no se embebe el cuerpo completo aquí, mismo patrón que raw_event_reference en specifications/normalized_event.schema.json)."
+    },
+    "attachments": {
+      "type": "array",
+      "description": "Metadatos de adjuntos -- NUNCA el contenido del adjunto embebido aquí.",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["filename", "quarantine_status"],
+        "properties": {
+          "filename": { "type": "string" },
+          "content_type": { "type": ["string", "null"] },
+          "size_bytes": { "type": ["integer", "null"], "minimum": 0 },
+          "quarantine_status": {
+            "type": "string",
+            "enum": ["pending_scan", "clean", "malicious", "quarantined", "scan_error"],
+            "description": "Ningún adjunto se reenvía ni se abre automáticamente antes de completar el escaneo -- ver docs/architecture/EMAIL_THREAD_SECURITY.md."
+          }
+        }
+      }
+    },
+    "forwarded_indicator": {
+      "type": "boolean",
+      "description": "true si el mensaje entrante muestra señales de haber sido reenviado (Fwd:, headers de reenvío) en vez de ser una respuesta directa -- un mensaje reenviado NO tiene la misma garantía de autenticidad que una respuesta directa del hilo, aunque el remitente sea un contacto autorizado (pudo reenviar contenido de un tercero). Ver docs/architecture/EMAIL_THREAD_SECURITY.md."
+    },
+    "compromised_mailbox_suspected": {
+      "type": "boolean",
+      "description": "true si hay señales de que el buzón del contacto autorizado puede estar comprometido (patrón de envío anómalo, contenido inconsistente con el estilo previo del contacto, coincide con un source_ip de mala reputación conocido). Cuando true, NUNCA se ejecuta ninguna acción sensible basada en este mensaje sin verificación por canal alterno (ver docs/architecture/EMAIL_THREAD_SECURITY.md y client_notification.schema.json recipient_level=secundario_por_canal_alterno)."
+    },
+    "routed_to": {
+      "type": "string",
+      "enum": ["case_engine", "human_review_queue", "quarantine"],
+      "description": "A dónde se envió este mensaje tras la verificación. 'case_engine' únicamente si sender_verification_status=authorized_contact Y thread_verification_status=verified Y compromised_mailbox_suspected=false Y forwarded_indicator=false."
+    }
+  }
+}
